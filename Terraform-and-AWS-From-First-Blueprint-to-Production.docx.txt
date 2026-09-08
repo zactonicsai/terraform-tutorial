@@ -1,0 +1,4658 @@
+﻿Terraform & AWS: From First Blueprint to Production
+
+
+Terraform & AWS
+From First Blueprint to Production
+A step-by-step book built around a real project:
+Kafka + Kafka UI + Keycloak on AWS EC2, deployed with modular Terraform
+Written for beginners. Explained with schools, grocery stores, and construction sites.
+September 2026 edition
+________________
+
+
+Table of Contents
+  ________________
+How to Use This Book
+This book teaches two things at once: Terraform (a tool that builds cloud infrastructure from text files) and AWS (Amazon's cloud, where that infrastructure lives). Instead of teaching with toy examples that you throw away, the whole book is built around one real project: a small Kafka messaging system with a web dashboard (Kafka UI) protected by a login server (Keycloak), all running on AWS.
+We start simple. Every chapter builds on the one before it. By the end you will have:
+* Read every line of the project and understood what it does, why it is there, and how it works.
+* Deployed the project yourself, step by step, and verified it with the AWS command line.
+* Learned the best practices, common mistakes ("gotchas"), and tips that professionals use.
+* Seen how to grow the project into something that a real company could run in production, and how to test it.
+Who this book is for
+You do not need to know anything about Terraform or AWS. If you can use a computer, type commands into a terminal, and follow a recipe, you are ready. Concepts are explained the way you would explain them to a curious middle-school student, using things you already understand: schools, grocery stores, and construction sites.
+The three analogies we use everywhere
+REAL-WORLD ANALOGY
+A school. A school has a building (the network), classrooms (subnets), hall monitors who check passes at doors (security groups), teachers and students who do the actual work (servers), and a principal's office that decides who is allowed to do what (IAM).
+	
+
+REAL-WORLD ANALOGY
+A grocery store. The store lot is the private network, the aisles are subnets, the front doors are the internet gateway, the security guard at the door is a security group, and the cash registers are servers. Employee badges are IAM roles.
+	
+
+REAL-WORLD ANALOGY
+A construction site. Terraform is the architect's blueprint plus the general contractor. You draw what you want; the contractor figures out the order to build it, builds only what has changed, and keeps a log of exactly what exists on site. Modules are the pre-built pieces (windows, doors, roof trusses) that the contractor reuses across many buildings.
+	
+
+Chapter layout
+Every chapter follows the same pattern:
+1. The idea – what the concept is, with an analogy.
+2. The details – keywords, syntax, and examples.
+3. In our project – where the concept appears in the real code.
+4. Verify it – AWS CLI commands to see the real thing in your account.
+5. Tips, gotchas, best practices – highlighted boxes.
+6. Chapter quiz – five questions. Answers are in Appendix C.
+Conventions
+* Text in this font is code, a file name, a command, or a keyword.
+* Boxes labelled TIP, GOTCHA, NOTE, BEST PRACTICE, ANALOGY and OFFICIAL DOCS call out things worth remembering.
+* Commands are written for a Mac or Linux terminal. On Windows, use WSL2 or PowerShell with the same commands.
+________________
+
+
+Chapter 1: Infrastructure as Code
+The idea
+Imagine you are the principal of a brand-new school. You need classrooms, desks, a front office, hall monitors, and a rule book that says who is allowed where. There are two ways to set this up.
+The manual way. You walk around, order furniture, tell each hall monitor what to do, and write nothing down. It works — until you need a second school. Then you have to remember everything you did and do it again by hand, and you will probably forget something.
+The blueprint way. You write down exactly what the school should look like: 12 classrooms with 30 desks each, two doors with monitors, this rule book. Now anyone can build the same school from the paper, you can compare the paper to the real building to find differences, and if the paper changes you know precisely what to fix.
+Infrastructure as Code (IaC) is the blueprint way for computer systems. Instead of clicking around a website to create servers and networks, you write text files that describe what you want, and a tool builds it for you. Terraform is the most popular tool for doing this.
+Why it matters
+Manual clicking
+	Infrastructure as Code
+	Hard to repeat exactly
+	Same result every time
+	No record of what was done
+	Files live in Git, with full history
+	One person knows how it works
+	Anyone can read the files
+	Mistakes found in production
+	Mistakes found in review, before building
+	Changing one thing is scary
+	The tool shows exactly what will change
+	Tearing down is a treasure hunt
+	One command removes everything
+	
+
+The three big ideas behind Terraform
+1. Declarative. You describe the end state ("I want a server this big in this network"), not the steps. Terraform figures out the steps. This is like ordering a sandwich by saying "turkey on wheat with lettuce" instead of "walk to the fridge, pick up the bread…".
+2. State. Terraform keeps a file (the state) that remembers what it built and the real IDs AWS assigned. This is the contractor's inventory log. Without it, Terraform would not know that the server it sees in AWS is the one from your blueprint.
+3. Plan before apply. Terraform always shows you what it will do before doing it. You read the plan, and only then say yes.
+REAL-WORLD ANALOGY
+A construction contractor reads the new blueprint, compares it to the building as it stands, and hands you a change order: "Add 2 windows, remove 1 door, repaint the lobby." You approve the change order before a single hammer swings. That change order is a Terraform plan.
+	
+
+What "the cloud" actually is
+The cloud is just other people's computers that you rent by the minute. Amazon has enormous buildings full of computers all over the world. When you ask AWS for a server, a small slice of one of those computers is handed to you within seconds. You pay only while you use it, and you can give it back any time. IaC is the natural way to talk to the cloud, because everything in the cloud is created by an API (a programmable interface), and Terraform speaks that API for you.
+Our project in one paragraph
+We are going to build a tiny "company" in the cloud. It has a private network (a VPC) with one public room (a subnet). Inside are two servers (EC2 instances). One runs Keycloak, a login service that checks usernames and passwords. The other runs Kafka, a message-passing system, plus Kafka UI, a website for looking at Kafka. Kafka UI asks Keycloak to log people in. Security groups act as door guards, IAM gives the servers a badge so we can remotely log in without passwords, and Elastic IPs give each server a permanent public address.
+________________
+Chapter Quiz
+Q1. What does "declarative" mean in Terraform?
+a) You write the steps in order
+b) You describe the end result and Terraform figures out the steps
+c) You must click in the AWS console first
+d) Terraform guesses what you want
+Q2. What is the Terraform state file most like?
+a) A blueprint
+b) A change order
+c) The contractor's inventory log of what has been built
+d) A receipt for payment
+Q3. Why is "plan before apply" important?
+a) It makes Terraform faster
+b) It lets you review exactly what will change before anything happens
+c) It is required by AWS
+d) It saves money on storage
+Q4. Which is NOT a benefit of Infrastructure as Code?
+a) Repeatability
+b) Version history in Git
+c) Never needing to understand what is being built
+d) Easy teardown
+Q5. In the school analogy, what are subnets?
+a) The principal's office
+b) The classrooms
+c) The hall monitors
+d) The students
+________________
+
+
+Chapter 2: AWS Basics — The Services We Use
+Before reading Terraform code, you need to know what each AWS piece is. This chapter explains every service in the project, how they fit together, and what depends on what.
+Regions and Availability Zones
+AWS divides the world into Regions (like us-east-1 in Virginia or eu-west-1 in Ireland). Each region is a group of separate data centers called Availability Zones (AZs), such as us-east-1a, us-east-1b. AZs are far enough apart that a fire or power failure in one does not affect the others.
+REAL-WORLD ANALOGY
+A grocery chain has stores in many cities (regions). Within a city, it has several stores across town (AZs). If one store loses power, the others still sell groceries.
+	
+
+Our project picks one region and then chooses one AZ that offers the server sizes we asked for. Not every AZ has every size, just as not every store carries every product.
+Accounts and IAM (Identity and Access Management)
+An AWS account is your company's space. IAM decides who and what may do things inside it.
+* An IAM user is a person with a login.
+* An IAM role is a badge that a server or service can wear to get permissions. Roles have no password; they are "assumed."
+* A policy is a rule list: "may read from S3", "may talk to SSM."
+* An instance profile is the holder that lets an EC2 server wear a role.
+REAL-WORLD ANALOGY
+In a school, the principal's office (IAM) decides who gets a key to the supply closet. Teachers (roles) get keys based on their job. A visitor badge (instance profile) is what lets a substitute teacher (EC2 server) use a teacher's key ring.
+	
+
+In our project, both servers wear a role that allows SSM Session Manager, so we can open a terminal on them from our laptop without SSH keys or open ports.
+VPC (Virtual Private Cloud)
+A VPC is your own private network inside AWS. It has an address range written in CIDR notation, such as 10.40.0.0/16, which means "all addresses starting with 10.40" — about 65,000 addresses.
+REAL-WORLD ANALOGY
+The VPC is the fenced grocery store property. Nothing gets in or out except through doors you build.
+	
+
+CIDR notation in two minutes
+10.40.0.0/16 means: the first 16 bits (10.40) are fixed; the rest are yours to assign. /24 fixes 24 bits (10.40.1) leaving 256 addresses. Smaller number after the slash = bigger network.
+CIDR
+	Addresses
+	Typical use
+	/16
+	65,536
+	A whole VPC
+	/24
+	256
+	One subnet
+	/32
+	1
+	One specific computer (used in "allow only my IP")
+	
+
+Subnets
+A subnet is a slice of the VPC's addresses that lives in exactly one AZ. A public subnet has a route to the internet; a private subnet does not.
+REAL-WORLD ANALOGY
+Subnets are aisles in the store. The bakery aisle by the front door is "public" — customers walk right in. The stock room is "private" — only staff, through the back.
+	
+
+Internet Gateway and Route Tables
+An Internet Gateway (IGW) is the door between your VPC and the internet. A route table is the set of signs that say "to reach the internet, go through this door." A subnet becomes public when its route table has a 0.0.0.0/0 route (meaning "everywhere else") pointing at the IGW.
+REAL-WORLD ANALOGY
+The IGW is the front entrance. The route table is the sign at the end of each aisle: "Exit this way." Without a sign, shoppers in that aisle never find the exit.
+	
+
+NAT Gateway (optional, not used by default in our project) lets private subnets reach out to the internet (to download updates) without letting the internet in. Like a mail slot: staff can send letters out, nobody can climb in.
+Security Groups
+A security group (SG) is a firewall attached to a server's network card. It has ingress rules (who may come in, on which port) and egress rules (where the server may go). Security groups are stateful: if you allow a request in, the reply is automatically allowed out.
+REAL-WORLD ANALOGY
+A security group is the hall monitor at a classroom door. The rule list says "students with a hall pass from room 8080 may enter." The monitor remembers who came in, so they can leave without a second pass.
+	
+
+A port is a numbered door on a server. Web servers use 80/443, Kafka UI uses 8080, Keycloak uses 8443 and 9000. Rules in our project:
+Server
+	Port
+	Who may come in
+	Why
+	Kafka
+	8080
+	Your IP (allowed_cidr)
+	Kafka UI website
+	Keycloak
+	8443
+	Your IP
+	Keycloak login pages and admin console (HTTPS)
+	Keycloak
+	8443
+	The Kafka security group
+	Kafka UI checks tokens with Keycloak privately
+	Keycloak
+	9000
+	Your IP
+	Health and metrics endpoints
+	
+
+EC2 (Elastic Compute Cloud)
+EC2 is the service that rents you servers, called instances. Key ideas:
+* Instance type – size. t3.small (2 vCPU, 2 GB RAM), t3.medium (2 vCPU, 4 GB RAM).
+* AMI (Amazon Machine Image) – the "install disk." We use Amazon Linux 2023.
+* EBS volume – the hard drive. We use encrypted gp3 disks.
+* User data – a script that runs once at first boot. Ours installs Docker and starts the apps.
+* Instance metadata (IMDS) – a tiny web service inside every instance that tells it about itself (its IP, its role). We require the safer version, IMDSv2.
+REAL-WORLD ANALOGY
+An instance type is the size of the truck you rent. The AMI is what is already loaded in the truck when you pick it up. User data is the note taped to the dashboard: "When you start, drive to the store and set up the display."
+	
+
+Launch Templates
+A launch template is a saved recipe for creating an instance: which AMI, what size, which subnet, which security groups, which user data, what disk. Instead of typing all of that each time, you point at the template.
+REAL-WORLD ANALOGY
+A construction company keeps a standard "classroom package" spec: these windows, this flooring, these lights. Every new classroom is built from the package. Change the package, and the next classroom gets the change.
+	
+
+Elastic IP (EIP)
+Instances normally get a random public IP that changes when they restart. An Elastic IP is a permanent public address you own and attach to an instance. We allocate EIPs before building the servers, because the servers' startup scripts need to know their own public address.
+REAL-WORLD ANALOGY
+A store's street address stays the same even if the building is remodeled. The EIP is the street address; the instance is the building.
+	
+
+SSM (Systems Manager)
+SSM does two jobs here:
+* Parameter Store – a public dictionary where AWS publishes the latest AMI IDs. We read /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 to always get the newest Amazon Linux.
+* Session Manager – opens a shell on an instance through AWS, using the instance's IAM role. No SSH port needed.
+How the pieces fit together
+Reading from the outside in:
+1. The Region is chosen; inside it we pick an AZ.
+2. The VPC is created with address range 10.40.0.0/16.
+3. An Internet Gateway is attached to the VPC.
+4. A public subnet 10.40.1.0/24 is created in the chosen AZ; its route table sends 0.0.0.0/0 to the IGW.
+5. Two security groups are created inside the VPC.
+6. An IAM role with the SSM policy is wrapped in an instance profile.
+7. Two Elastic IPs are allocated.
+8. Two launch templates combine AMI + size + subnet + SG + profile + user data.
+9. Two EC2 instances are launched from the templates and attached to the EIPs.
+10. At boot, user data installs Docker and starts Keycloak, then Kafka and Kafka UI.
+Dependency map
+Terraform builds things in the right order because each resource references the one it needs. Here is the full list for our project — what each thing needs and why.
+Resource
+	Depends on
+	Why
+	VPC
+	(nothing)
+	The foundation
+	Internet Gateway
+	VPC
+	Must attach to a VPC
+	Subnet
+	VPC, selected AZ
+	Lives inside the VPC's address space in one AZ
+	Route table
+	VPC
+	Belongs to the VPC
+	Route (0.0.0.0/0)
+	Route table, IGW
+	Points the table at the door
+	Route table association
+	Subnet, route table
+	Connects the sign to the aisle
+	Security group
+	VPC
+	Firewalls are per-VPC
+	SG rule (SG-to-SG)
+	Both security groups
+	The Keycloak rule references the Kafka SG's ID
+	IAM role
+	(nothing)
+	Global, not tied to a region
+	Policy attachment
+	IAM role
+	Attaches to the role
+	Instance profile
+	IAM role
+	Wraps the role for EC2
+	Elastic IP
+	(nothing)
+	Allocated from AWS's pool
+	AMI lookup
+	(nothing)
+	Reads a public SSM parameter
+	Launch template
+	AMI, subnet, SG, instance profile, user data
+	The recipe needs all ingredients
+	Keycloak instance
+	Keycloak launch template
+	Built from the recipe
+	Keycloak EIP association
+	Keycloak instance, Keycloak EIP
+	Needs both to exist
+	Kafka user data
+	Keycloak instance's private IP
+	Kafka UI must know where Keycloak is
+	Kafka launch template
+	Kafka user data + same as above
+	
+
+	Kafka instance
+	Kafka launch template, Keycloak instance
+	Kafka UI fetches Keycloak's certificate at boot, so Keycloak must be running first
+	Kafka EIP association
+	Kafka instance, Kafka EIP
+	
+
+	
+
+NOTE
+Most dependencies are implicit — Terraform sees vpc_id = aws_vpc.this.id and knows the subnet needs the VPC. A few are explicit with depends_on, used when there is no attribute reference but ordering still matters (Kafka waiting for Keycloak).
+	
+
+Verify with the AWS CLI
+You will run these commands throughout the book. Set your region once:
+export AWS_DEFAULT_REGION=us-east-1
+aws sts get-caller-identity          # who am I?
+aws ec2 describe-availability-zones --query 'AvailabilityZones[].ZoneName'
+aws ec2 describe-vpcs --query 'Vpcs[].{Id:VpcId,Cidr:CidrBlock,Name:Tags[?Key==`Name`].Value|[0]}' --output table
+aws ec2 describe-subnets --query 'Subnets[].{Id:SubnetId,Cidr:CidrBlock,AZ:AvailabilityZone,Public:MapPublicIpOnLaunch}' --output table
+aws ec2 describe-security-groups --query 'SecurityGroups[].{Id:GroupId,Name:GroupName,Vpc:VpcId}' --output table
+aws ec2 describe-instances --query 'Reservations[].Instances[].{Id:InstanceId,Type:InstanceType,State:State.Name,IP:PublicIpAddress}' --output table
+aws iam list-roles --query 'Roles[?contains(RoleName, `kafka`)].RoleName'
+
+
+TIP
+--query uses a language called JMESPath to pick fields. --output table makes results readable. Add --output json when you want to copy IDs.
+	
+
+OFFICIAL DOCS
+VPC user guide: https://docs.aws.amazon.com/vpc/latest/userguide/ · EC2 user guide: https://docs.aws.amazon.com/ec2/ · IAM: https://docs.aws.amazon.com/IAM/latest/UserGuide/ · Security groups: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html · Session Manager: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html
+	
+
+Chapter Quiz
+Q1. A subnet lives in how many Availability Zones?
+a) Exactly one
+b) Two, for safety
+c) All of them
+d) It depends on size
+Q2. What makes a subnet "public"?
+a) Its name contains "public"
+b) Its route table sends 0.0.0.0/0 to an Internet Gateway
+c) It has more than 100 addresses
+d) It has a security group
+Q3. How many addresses are in 10.40.1.0/24?
+a) 24
+b) 256
+c) 65,536
+d) 1
+Q4. Why does the project allocate Elastic IPs before creating the servers?
+a) EIPs are cheaper that way
+b) The servers' startup scripts need to know their permanent public address
+c) AWS requires it
+d) To pick the AZ
+Q5. What does an instance profile do?
+a) Stores the server's password
+b) Lets an EC2 instance wear an IAM role
+c) Chooses the instance type
+d) Opens a port
+________________
+
+
+Chapter 3: How Terraform Works
+The workflow: write, plan, apply
+Terraform has a simple rhythm you will repeat hundreds of times:
+1. Write – edit .tf files describing what you want.
+2. Init – terraform init downloads the providers (plugins that talk to AWS) and sets up the state backend.
+3. Plan – terraform plan compares your files + state to reality and prints the change order.
+4. Apply – terraform apply executes the plan (after you type yes).
+5. Destroy – terraform destroy removes everything it built.
+REAL-WORLD ANALOGY
+Write = draw the blueprint. Init = hire subcontractors who know AWS. Plan = the change order. Apply = build it. Destroy = demolition day.
+	
+
+The moving parts
+Part
+	What it is
+	Analogy
+	Configuration (.tf files)
+	Your description of resources
+	The blueprint
+	Provider
+	Plugin that knows how to call one cloud's API (hashicorp/aws)
+	A subcontractor who knows one trade
+	Resource
+	One thing to create (a VPC, an instance)
+	One item on the blueprint
+	Data source
+	Something to read, not create (latest AMI ID)
+	Looking up the building code
+	State
+	Record of what exists and its IDs
+	Inventory log
+	Backend
+	Where state is stored (local file, S3)
+	The filing cabinet
+	Plan
+	Computed list of create/update/delete actions
+	Change order
+	Graph
+	Internal map of what depends on what
+	Build schedule
+	
+
+How Terraform decides what to do
+For every resource, Terraform compares three things: what your files say, what the state says was built last time, and what AWS says exists right now (it refreshes by asking AWS). Then:
+* In files, not in state → create (+).
+* In state, not in files → destroy (-).
+* In both, but different → update in place (~) or replace (-/+) if the change cannot be done live.
+* Same everywhere → do nothing.
+GOTCHA
+A replace destroys and recreates a resource. Changing an EC2 instance's subnet or AMI replaces it, and the disk is lost. The plan marks these with -/+ and says "forces replacement." Always look for that phrase before typing yes.
+	
+
+The dependency graph
+Terraform reads every file, finds every reference like aws_vpc.this.id, and builds a graph. Things with no dependencies build first, in parallel (up to 10 at once by default). This is why you never write "create the VPC, then the subnet" — the reference does it for you.
+State in detail
+State is a JSON file (terraform.tfstate). It contains every resource's attributes, including some sensitive values (passwords generated by Terraform). Rules:
+* Never edit it by hand.
+* Never commit it to Git.
+* For teams, store it remotely (S3 + locking) so two people cannot apply at once.
+* terraform state list shows what is tracked; terraform state show <addr> shows one resource.
+BEST PRACTICE
+Treat state like the school's master key cabinet: locked, backed up, and accessed only through the tool.
+	
+
+Chapter Quiz
+Q1. What does terraform init do?
+a) Creates all resources
+b) Downloads providers and configures the backend
+c) Deletes state
+d) Runs the tests
+Q2. A plan line starting with -/+ means:
+a) Update in place
+b) Nothing changes
+c) Destroy then recreate (replace)
+d) Read-only
+Q3. How does Terraform know the subnet must be built after the VPC?
+a) You list them in order
+b) The subnet references aws_vpc.this.id
+c) Alphabetical order
+d) It builds everything at once
+Q4. Which is TRUE about state?
+a) It is safe to commit to Git
+b) It may contain secrets and must be protected
+c) It can be edited by hand freely
+d) It is optional
+Q5. A provider is best described as:
+a) The cloud itself
+b) A plugin that translates Terraform into one API's calls
+c) A module
+d) A variable file
+________________
+
+
+Chapter 4: Setting Up and Your First Terraform Project
+Step 1 – Install the tools
+Terraform. Download from https://developer.hashicorp.com/terraform/install or use a package manager:
+# macOS
+brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+# Windows (PowerShell, as admin)
+choco install terraform
+# Verify
+terraform -version
+
+
+AWS CLI v2. https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+aws --version
+
+
+Session Manager plugin (to open shells on instances): https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+Step 2 – Create AWS credentials
+1. Sign in to the AWS console. Open IAM → Users → Create user (e.g. terraform-lab).
+2. Attach a policy. For learning, AdministratorAccess is simplest; in real life use least privilege (see Chapter 21).
+3. Create an access key for the user and copy both values.
+4. Configure the CLI:
+aws configure
+# AWS Access Key ID: AKIA...
+# AWS Secret Access Key: ...
+# Default region name: us-east-1
+# Default output format: json
+aws sts get-caller-identity
+
+
+GOTCHA
+Never paste access keys into .tf files or commit them to Git. Terraform's AWS provider automatically reads the same credentials the CLI uses.
+	
+
+BEST PRACTICE
+For anything beyond a personal lab, use AWS IAM Identity Center (SSO) with aws sso login, which gives temporary credentials that expire.
+	
+
+Step 3 – Your very first project
+Create a folder and one file, main.tf:
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+ 
+provider "aws" {
+  region = "us-east-1"
+}
+ 
+resource "aws_vpc" "first" {
+  cidr_block = "10.99.0.0/16"
+  tags = {
+    Name = "my-first-vpc"
+  }
+}
+ 
+output "vpc_id" {
+  value = aws_vpc.first.id
+}
+
+
+Read it top to bottom:
+Block
+	What it says
+	terraform { required_version }
+	Refuse to run on old Terraform
+	required_providers
+	We need the AWS provider, version 6.x
+	provider "aws"
+	Talk to region us-east-1
+	resource "aws_vpc" "first"
+	Create a VPC; first is our nickname for it
+	cidr_block
+	An argument the AWS provider requires
+	tags
+	Labels; Name is what the console displays
+	output "vpc_id"
+	Print the real ID after apply
+	
+
+Run it:
+terraform init
+terraform plan
+terraform apply
+# type: yes
+terraform output vpc_id
+aws ec2 describe-vpcs --filters Name=tag:Name,Values=my-first-vpc
+terraform destroy
+
+
+You just built, verified, and demolished a network in the cloud. Everything else in this book is more of the same, with more pieces.
+Step 4 – Understand what appeared on disk
+File/folder
+	Purpose
+	Commit to Git?
+	.terraform/
+	Downloaded providers
+	No
+	.terraform.lock.hcl
+	Pins exact provider versions
+	Yes
+	terraform.tfstate
+	State
+	No (use remote state)
+	terraform.tfstate.backup
+	Previous state
+	No
+	
+
+Chapter Quiz
+Q1. Which command downloads the AWS provider?
+a) terraform plan
+b) terraform init
+c) terraform apply
+d) aws configure
+Q2. Where should AWS credentials live?
+a) Inside main.tf
+b) In the AWS CLI config / environment, never in code
+c) In the state file
+d) In a tag
+Q3. In resource "aws_vpc" "first", what is first?
+a) The AWS name of the VPC
+b) Your local nickname used to reference it in code
+c) The region
+d) A required keyword
+Q4. Which file should be committed to Git?
+a) terraform.tfstate
+b) .terraform/
+c) .terraform.lock.hcl
+d) .terraform.tfstate.backup
+Q5. What does terraform destroy do?
+a) Deletes the .tf files
+b) Removes every resource in state
+c) Removes only the VPC
+d) Clears the AWS account
+________________
+
+
+Chapter 5: The Terraform Language — Every Keyword Explained
+Terraform files are written in HCL (HashiCorp Configuration Language). This chapter is the quick tour of every keyword used in the project. Chapters 7–12 then go deep: types and formats (7), variables and tfvars (8), functions (9), resources and required settings (10), writing modules (11), and what to avoid (12).
+Blocks, arguments and expressions
+resource "aws_subnet" "public" {   # block type, labels
+  vpc_id     = aws_vpc.main.id     # argument = expression
+  cidr_block = "10.40.1.0/24"
+  tags = { Name = "public" }       # a map value
+}
+
+
+A block has a type, zero or more labels, and a body. Arguments are name = value. Expressions produce values: literals, references, function calls, conditionals.
+Top-level block types
+Keyword
+	Purpose
+	Example
+	terraform
+	Settings: versions, providers, backend
+	terraform { required_version = ">= 1.6" }
+	provider
+	Configure a plugin
+	provider "aws" { region = var.aws_region }
+	resource
+	Create/manage something
+	resource "aws_vpc" "this" { ... }
+	data
+	Read something existing
+	data "aws_ssm_parameter" "ami" { name = "..." }
+	variable
+	An input
+	variable "vpc_cidr" { type = string }
+	output
+	A result to print or pass on
+	output "vpc_id" { value = aws_vpc.this.id }
+	locals
+	Named intermediate values
+	locals { name = "${var.project}-vpc" }
+	module
+	Reuse a folder of Terraform
+	module "vpc" { source = "../../modules/vpc" }
+	check
+	Assert something after plan
+	check "az" { assert { condition = ... } }
+	
+
+Referencing things
+Reference
+	Meaning
+	var.name
+	An input variable
+	local.name
+	A local value
+	aws_vpc.this.id
+	Attribute id of resource aws_vpc named this
+	data.aws_ssm_parameter.ami.value
+	Attribute of a data source
+	module.vpc.vpc_id
+	An output of a module
+	path.module
+	Folder of the current file
+	each.key, each.value
+	Current item inside for_each
+	count.index
+	Current index inside count
+	
+
+Types
+Type
+	Example
+	string
+	"hello"
+	number
+	20
+	bool
+	true
+	list(string)
+	["a", "b"]
+	map(string)
+	{ Name = "x" }
+	set(string)
+	Like a list, unordered, no duplicates
+	object({...})
+	Structure with named fields
+	optional(type, default)
+	Object field that may be omitted
+	
+
+A real example from the project — the keycloak variable is an object where every field is optional:
+variable "keycloak" {
+  type = object({
+    enabled          = optional(bool, true)
+    instance_type    = optional(string, "t3.small")
+    root_volume_size = optional(number, 20)
+    admin_username   = optional(string, "admin")
+    admin_password   = optional(string)      # no default => null
+  })
+  default = {}
+}
+
+
+Setting keycloak = { instance_type = "t3.medium" } in tfvars keeps every other default. This is how one variable can configure a whole server.
+Meta-arguments (work on any resource or module)
+Meta-argument
+	Purpose
+	count = N
+	Make N copies (or 0 to disable). Access with [0].
+	for_each = map_or_set
+	One copy per item, keyed by name. Access with ["key"].
+	depends_on = [...]
+	Explicit ordering when there is no reference
+	provider = aws.other
+	Use an alternate provider config
+	lifecycle { ... }
+	create_before_destroy, prevent_destroy, ignore_changes, precondition, postcondition
+	
+
+TIP
+Prefer for_each over count for lists of things. With count, removing item 0 shifts every index and Terraform recreates everything. With for_each, removing key "b" only removes "b".
+	
+
+GOTCHA
+count and for_each values must be known at plan time. You cannot base them on an attribute AWS only returns after creation.
+	
+
+Expressions you will see
+String interpolation: "${var.project_name}-vpc"
+Conditional: var.enabled ? 1 : 0
+For expression (build a map):
+{ for k, s in aws_subnet.public : k => s.id }
+
+
+For expression (filter a list):
+[for v in list : v if v != null]
+
+
+Splat: aws_instance.web[*].id – all IDs from a counted resource.
+Try: try(module.kafka[0].id, null) – return null instead of erroring when the module has zero copies.
+Coalesce: coalesce(var.az, local.auto_az) – first non-null, non-empty value.
+Functions used in the project
+Function
+	Does
+	Example
+	merge(a, b)
+	Combine maps; later wins
+	merge(var.tags, { Name = "x" })
+	flatten(list)
+	Un-nest lists
+	Used to turn per-SG rule lists into one list
+	toset, tolist, tostring
+	Convert types
+	tostring(module.lt.latest_version)
+	setintersection(a, b, ...)
+	Items in all sets
+	AZs that support every instance type
+	sort(list)
+	Alphabetical
+	Deterministic AZ choice
+	length(x)
+	Count
+	length(var.public_subnets) > 0
+	join(sep, list)
+	List to string
+	Error messages
+	templatefile(path, vars)
+	Render a template file
+	User-data scripts
+	base64encode(s)
+	Encode
+	User data must be base64
+	file(path)
+	Read a file
+	
+
+	jsonencode(map)
+	Map to JSON
+	IAM policies
+	anytrue(list), alltrue(list)
+	Any/all true
+	Validations
+	concat(a, b)
+	Join lists
+	
+
+	
+
+OFFICIAL DOCS
+Full function list: https://developer.hashicorp.com/terraform/language/functions
+	
+
+Variables in depth
+variable "allowed_cidr" {
+  description = "IPv4 CIDR allowed in. YOUR_IP/32 recommended."
+  type        = string
+  default     = "0.0.0.0/0"
+  sensitive   = false
+  validation {
+    condition     = can(cidrhost(var.allowed_cidr, 0))
+    error_message = "Must be a valid CIDR like 203.0.113.10/32."
+  }
+}
+
+
+Ways to set a variable, from lowest to highest priority:
+1. default in the block
+2. Environment variable TF_VAR_allowed_cidr=...
+3. terraform.tfvars (loaded automatically)
+4. *.auto.tfvars
+5. -var-file=dev.tfvars
+6. -var allowed_cidr=...
+tfvars files are just name = value lines. They are the "order form" for a module: the code is the menu, the tfvars are what you ordered.
+Outputs, locals, sensitive values
+* output values print after apply and are readable by other stacks through remote state.
+* locals are for computing a value once and naming it.
+* Mark passwords sensitive = true; Terraform hides them in plans and outputs (they still exist in state).
+Templates: templatefile and .tftpl
+A template is a text file with ${variable} placeholders. templatefile("user_data.sh.tftpl", { ip = "1.2.3.4" }) fills them in. Templates can also loop: %{ for x in list }...%{ endfor }.
+GOTCHA
+If your shell script itself contains ${...} (bash syntax), Terraform will try to interpolate it. Escape with $${...}. Our scripts avoid this by using $VARIABLE without braces for bash variables.
+	
+
+Checks, preconditions and validations
+Mechanism
+	Where
+	When it runs
+	validation inside variable
+	Variable block
+	As soon as the variable is evaluated; can only reference that variable (cross-variable references need Terraform 1.9+)
+	precondition in lifecycle
+	Resource
+	Before creating/updating that resource
+	check block
+	Top level
+	After plan; produces a warning, does not stop apply
+	
+
+Chapter Quiz
+Q1. Which meta-argument creates one copy per key of a map?
+a) count
+b) for_each
+c) depends_on
+d) lifecycle
+Q2. What does try(module.kafka[0].id, null) return when the module has count = 0?
+a) An error
+b) An empty string
+c) null
+d) 0
+Q3. Which has the highest priority when setting a variable?
+a) default
+b) terraform.tfvars
+c) -var on the command line
+d) TF_VAR environment variable
+Q4. optional(string, "admin") in an object type means:
+a) The field is required
+b) The field may be omitted and defaults to "admin"
+c) The field is always null
+d) The field is a list
+Q5. Why must count be known at plan time?
+a) For speed
+b) Terraform must know how many resources to plan before creating anything
+c) AWS requires it
+d) It doesn't have to be
+________________
+
+
+Chapter 6: Modules — Reusable Building Blocks
+The idea
+A module is a folder of .tf files with inputs (variables) and outputs. The root folder you run terraform apply in is itself a module (the "root module"). Any other folder you call with a module block is a child module.
+REAL-WORLD ANALOGY
+A window manufacturer does not build each window from raw glass on site. They have a "double-hung window" product with options (width, height, color). The builder orders 40 of them with different options. The module is the product; the module block is the order form; variables are the options; outputs are what the builder needs to know afterwards (how big is the rough opening).
+	
+
+Anatomy of a module
+modules/elastic_ip/
+├── main.tf        # resources
+├── variables.tf   # inputs
+├── outputs.tf     # results
+└── versions.tf    # required providers
+
+
+main.tf:
+resource "aws_eip" "this" {
+  domain = "vpc"
+  tags   = merge(var.tags, { Name = "${var.name}-eip" })
+}
+
+
+variables.tf:
+variable "name" { type = string }
+variable "tags" { type = map(string), default = {} }
+
+
+outputs.tf:
+output "allocation_id" { value = aws_eip.this.id }
+output "public_ip"     { value = aws_eip.this.public_ip }
+
+
+Calling it:
+module "keycloak_eip" {
+  source = "../../modules/elastic_ip"
+  name   = "${var.project_name}-keycloak"
+  tags   = var.tags
+}
+# use: module.keycloak_eip.public_ip
+
+
+Rules of good modules
+* No hard-coded values. Everything that could differ between uses is a variable.
+* Sensible defaults. A caller should be able to pass 2–3 things and get a good result.
+* Outputs for everything a caller might need (IDs, ARNs, names, IPs).
+* One job. A VPC module makes networks; it does not also make servers.
+* Document inputs with description.
+* Pin providers in versions.tf but do not put provider blocks inside child modules — the root passes providers down automatically.
+GOTCHA
+A provider block inside a child module makes it impossible to use with count/for_each and hard to reuse. Keep providers in the root.
+	
+
+Module sources
+Source
+	Example
+	Local path
+	source = "../../modules/vpc"
+	Terraform Registry
+	source = "terraform-aws-modules/vpc/aws" version = "5.x"
+	Git
+	source = "git::https://github.com/org/repo.git//modules/vpc?ref=v1.2.0"
+	
+
+BEST PRACTICE
+Pin a version (?ref= or version =) for anything not local. An unpinned module can change under you.
+	
+
+Modules with count and for_each
+Modules accept count and for_each just like resources (Terraform ≥ 0.13). Our project uses count = var.keycloak.enabled ? 1 : 0 to make a server optional, and for_each = var.instance_roles to build any number of IAM roles from a map.
+Stacks vs modules
+A stack (our word for a root module with its own state) is a deployable unit. We split the project into two stacks:
+* 10-network – slow-changing, foundational, shared.
+* 20-apps – changes often, depends on the network.
+Splitting means an app change can never accidentally destroy the network, and two teams can own the two halves. The stacks share information through outputs and remote state (Chapter 19).
+Chapter Quiz
+Q1. What is the root module?
+a) The modules/ folder
+b) The folder where you run terraform apply
+c) The AWS provider
+d) The first resource
+Q2. Which should NOT be inside a reusable child module?
+a) variables.tf
+b) outputs.tf
+c) A provider block with a region
+d) versions.tf
+Q3. How does a caller read a module's result?
+a) module.name.output_name
+b) var.name
+c) resource.name
+d) data.module.name
+Q4. Why split the project into a network stack and an apps stack?
+a) Terraform requires it
+b) To isolate risk and let the pieces change independently
+c) To use fewer files
+d) To avoid modules
+Q5. What does count = var.kafka.enabled ? 1 : 0 on a module do?
+a) Makes two copies
+b) Makes the module optional based on a variable
+c) Errors
+d) Sets the instance type
+________________
+
+
+Chapter 7: Types and Values — Strings, Numbers, Lists, Maps and Objects
+Everything in Terraform is a value with a type. Getting types right is half of writing Terraform. This chapter shows every type, how to write it, how to read it back, and how the project uses it.
+The primitive types
+Type
+	How you write it
+	Notes
+	string
+	"hello"
+	Always double quotes. Single quotes are an error.
+	number
+	20, 3.5, -1
+	No quotes. "20" is a string, but Terraform converts automatically where a number is expected.
+	bool
+	true, false
+	No quotes.
+	null
+	null
+	"No value." An argument set to null is the same as not setting it.
+	
+
+variable "root_volume_size" { type = number, default = 20 }
+variable "enabled"          { type = bool,   default = true }
+variable "key_name"         { type = string, default = null }   # optional: null means "don't set"
+
+
+TIP
+null is how you make a resource argument optional. In the launch template module, key_name = var.key_name with a null default means "no key pair" — AWS never sees the argument.
+	
+
+Strings in depth
+Interpolation
+Put an expression inside ${ } to build a string:
+"${var.project_name}-vpc"                 # kafka-keycloak-lab-vpc
+"https://${local.keycloak_public_ip}:8443/admin/"
+"aws ssm start-session --region ${var.aws_region} --target ${module.keycloak[0].id}"
+
+
+GOTCHA
+Do not wrap a bare reference in quotes and braces: "${var.name}" is the same as var.name and terraform fmt will complain. Only use ${} when you are joining text and values.
+	
+
+Escaping
+You want
+	Write
+	A literal ${
+	$${
+	A literal %{
+	%%{
+	A double quote inside a string
+	\"
+	A newline
+	\n (or use a heredoc)
+	
+
+Our user-data templates contain bash variables like $STACK_DIR (no braces), so they never collide with Terraform's ${}.
+Heredocs (multi-line strings)
+description = <<-EOT
+  Map of security groups keyed by short name. Each rule must set exactly one
+  source: cidr_ipv4, cidr_ipv6, source_security_group_key ...
+EOT
+
+
+<<-EOT (with the dash) strips the leading indentation. Use heredocs for descriptions, inline policies and small scripts; use templatefile() for anything longer.
+The format function — printf-style strings
+format("%s-%s", var.project_name, "vpc")        # "kafka-keycloak-lab-vpc"
+format("%03d", 7)                                # "007"
+format("%.2f GB", 1.5)                           # "1.50 GB"
+format("%-10s|", "abc")                          # "abc       |"
+formatlist("server-%02d", [1, 2, 3])             # ["server-01", "server-02", "server-03"]
+
+
+Verb
+	Meaning
+	%s
+	string
+	%d
+	integer
+	%f / %.2f
+	float / with 2 decimals
+	%q
+	quoted string
+	%v
+	any value
+	%t
+	boolean
+	%03d
+	zero-padded to width 3
+	%%
+	a literal percent sign
+	
+
+String directives — logic inside strings
+"%{ if var.enabled }enabled%{ else }disabled%{ endif }"
+"%{ for ip in var.ips }${ip},%{ endfor }"
+
+
+Directives are most useful inside .tftpl template files. Add ~ to strip whitespace: %{~ for x in list ~}.
+Common string functions
+Function
+	Example
+	Result
+	upper, lower, title
+	upper("kafka")
+	"KAFKA"
+	trimspace
+	trimspace("  a  ")
+	"a"
+	trimprefix, trimsuffix
+	trimsuffix("x-sg", "-sg")
+	"x"
+	replace
+	replace("a.b.c", ".", "-")
+	"a-b-c"
+	split
+	split(",", "a,b")
+	["a", "b"]
+	join
+	join(", ", ["a", "b"])
+	"a, b"
+	substr
+	substr("abcdef", 0, 3)
+	"abc"
+	length
+	length("abc")
+	3
+	regex
+	regex("[0-9]+", "sg-123")
+	"123"
+	startswith, endswith
+	startswith("sg-1", "sg-")
+	true
+	
+
+Lists and tuples
+A list is an ordered sequence of values of the same type. Index from 0.
+variable "instance_types_for_az_selection" {
+  type    = list(string)
+  default = ["t3.medium", "t3.small"]
+}
+var.instance_types_for_az_selection[0]       # "t3.medium"
+length(var.instance_types_for_az_selection)  # 2
+
+
+A tuple is like a list but each position may have a different type: ["a", 1, true]. You rarely declare tuples; they appear when Terraform infers a type from a literal.
+Function
+	Example
+	Result
+	concat
+	concat(["a"], ["b"])
+	["a", "b"]
+	contains
+	contains(["a","b"], "a")
+	true
+	distinct
+	distinct(["a","a","b"])
+	["a","b"]
+	element
+	element(["a","b"], 3)
+	"b" (wraps around)
+	index
+	index(["a","b"], "b")
+	1
+	flatten
+	flatten([["a"],["b","c"]])
+	["a","b","c"]
+	reverse
+	reverse([1,2])
+	[2,1]
+	slice
+	slice([1,2,3,4], 1, 3)
+	[2,3]
+	sort
+	sort(["b","a"])
+	["a","b"]
+	compact
+	compact(["a","","b"])
+	["a","b"] (drops empty strings)
+	chunklist
+	chunklist([1,2,3,4], 2)
+	[[1,2],[3,4]]
+	range
+	range(3)
+	[0,1,2]
+	
+
+Sets
+A set is an unordered collection with no duplicates. for_each accepts sets of strings.
+for_each = toset(var.managed_policy_arns)   # from the IAM module
+
+
+Function
+	Example
+	Result
+	toset
+	toset(["a","a"])
+	{"a"}
+	setintersection
+	setintersection(["a","b"], ["b","c"])
+	{"b"}
+	setunion
+	setunion(["a"], ["b"])
+	{"a","b"}
+	setsubtract
+	setsubtract(["a","b"], ["a"])
+	{"b"}
+	setproduct
+	setproduct(["a"], [1,2])
+	[["a",1],["a",2]]
+	
+
+GOTCHA
+You cannot index a set (var.myset[0] is an error). Convert with tolist(...) first, and sort() if you need a stable order — exactly what the network stack does with sort(tolist(setintersection(...))).
+	
+
+Maps
+A map is a collection of key = value pairs where every value has the same type. Keys are always strings.
+tags = {
+  Environment = "dev"
+  Owner       = "platform-team"
+}
+var.tags["Environment"]     # "dev"
+lookup(var.tags, "Owner", "unknown")
+
+
+Function
+	Example
+	Result
+	keys
+	keys({a=1,b=2})
+	["a","b"]
+	values
+	values({a=1,b=2})
+	[1,2]
+	lookup
+	lookup(m, "k", "default")
+	value or default
+	merge
+	merge({a=1}, {a=2,b=3})
+	{a=2,b=3} (right wins)
+	zipmap
+	zipmap(["a","b"], [1,2])
+	{a=1,b=2}
+	tomap
+	tomap({a="x"})
+	map(string)
+	
+
+Maps are the workhorse of the project: public_subnets, security_groups, instance_roles are all maps, so each item has a name that becomes its for_each key and its Terraform address.
+Objects
+An object is a structure with named fields of possibly different types. Objects describe "one thing with many settings."
+variable "keycloak" {
+  type = object({
+    enabled          = optional(bool, true)
+    instance_type    = optional(string, "t3.small")
+    root_volume_size = optional(number, 20)
+    key_name         = optional(string)          # default null
+    tags             = optional(map(string), {})
+  })
+  default = {}
+}
+var.keycloak.instance_type
+
+
+Map of objects is the most common shape for "many things with settings":
+type = map(object({
+  cidr_block        = string                  # required
+  availability_zone = optional(string)        # optional
+}))
+
+
+TIP
+optional(type) without a default gives null. optional(type, default) fills in the default when the caller omits the field. Required fields have no optional() — omitting them is an error with a helpful message.
+	
+
+Type conversion
+Terraform converts primitives automatically where safe ("20" → 20, true → "true"). For collections use explicit functions: tolist, toset, tomap, tostring, tonumber, tobool. can(tonumber(x)) tests whether a conversion would work.
+any and inferred types
+type = any accepts anything but gives up validation. Prefer precise types; use any only for pass-through values you never inspect.
+Reading a value's type
+Use terraform console:
+> type(var.public_subnets)
+map(object({ cidr_block = string, availability_zone = optional(string) ... }))
+> var.public_subnets["public-a"].cidr_block
+"10.40.1.0/24"
+
+
+Chapter Quiz
+Q1. Which is a valid Terraform string?
+a) 'hello'
+b) "hello"
+c) hello
+d) hello
+Q2. format("%03d", 5) returns:
+a) "5"
+b) "005"
+c) "5.000"
+d) an error
+Q3. Which collection type can you NOT index with [0]?
+a) list
+b) tuple
+c) set
+d) string
+Q4. In merge({a=1}, {a=2}), what is a?
+a) 1
+b) 2
+c) [1,2]
+d) error
+Q5. optional(string) with no default gives what when omitted?
+a) ""
+b) "optional"
+c) null
+d) error
+________________
+
+
+Chapter 8: Variables, tfvars, Locals and Outputs in Depth
+Declaring a variable — every argument
+variable "allowed_cidr" {
+  description = "IPv4 CIDR allowed to reach Kafka UI and Keycloak. YOUR_IP/32 recommended."
+  type        = string
+  default     = "0.0.0.0/0"
+  nullable    = false
+  sensitive   = false
+  ephemeral   = false
+ 
+  validation {
+    condition     = can(cidrhost(var.allowed_cidr, 0))
+    error_message = "allowed_cidr must be a valid IPv4 CIDR such as 203.0.113.10/32."
+  }
+}
+
+
+Argument
+	Required?
+	Meaning
+	description
+	No (but always write one)
+	Shown in docs and error messages
+	type
+	No (defaults to any)
+	Constraint; always set it
+	default
+	No
+	If absent, the caller must provide a value
+	nullable
+	No (default true)
+	false rejects null
+	sensitive
+	No
+	Hide in plan/output
+	ephemeral
+	No (1.10+)
+	Never stored in state/plan — for short-lived secrets
+	validation
+	No, repeatable
+	Custom rule; condition must be true
+	
+
+BEST PRACTICE
+A variable with no default is a required input. Use this for things a caller must decide (vpc_id, cidr_block). Give defaults to everything else.
+	
+
+Validation examples
+validation {
+  condition     = contains(["gp2", "gp3", "io1", "io2"], var.root_volume_type)
+  error_message = "root_volume_type must be gp2, gp3, io1 or io2."
+}
+validation {
+  condition     = var.root_volume_size >= 8 && var.root_volume_size <= 16384
+  error_message = "root_volume_size must be between 8 and 16384 GiB."
+}
+validation {
+  condition     = can(regex("^t3\\.|^m[5-7]\\.", var.instance_type))
+  error_message = "Only t3 and m5–m7 families are approved."
+}
+validation {
+  condition     = alltrue([for k, s in var.public_subnets : can(cidrhost(s.cidr_block, 0))])
+  error_message = "Every public subnet needs a valid cidr_block."
+}
+
+
+can(expr) returns true if expr evaluates without error — the standard way to validate formats.
+How values reach a variable
+Terraform merges sources in this order; later sources override earlier ones:
+1. default in the variable block
+2. Environment variables TF_VAR_<name> (e.g. export TF_VAR_aws_region=us-west-2)
+3. terraform.tfvars in the working directory (auto-loaded)
+4. terraform.tfvars.json (auto-loaded)
+5. *.auto.tfvars / *.auto.tfvars.json, alphabetical (auto-loaded)
+6. -var-file=file.tfvars on the command line, in the order given
+7. -var name=value on the command line, in the order given
+GOTCHA
+dev.tfvars is not auto-loaded. If you forget -var-file=dev.tfvars, Terraform silently uses the defaults. For required variables with no default, it will prompt interactively — and CI will hang. Always pass the file.
+	
+
+tfvars file format
+A .tfvars file is plain HCL with only assignments. No blocks, no variable keyword, no expressions that reference resources (functions are allowed).
+# strings, numbers, bools, null
+aws_region   = "us-east-1"
+volume_size  = 30
+enabled      = true
+key_name     = null
+ 
+# list
+instance_types_for_az_selection = ["t3.medium", "t3.small"]
+ 
+# map
+tags = {
+  Environment = "dev"
+  Owner       = "platform"
+}
+ 
+# object (fields you omit take their optional() defaults)
+keycloak = {
+  instance_type    = "t3.small"
+  root_volume_size = 20
+}
+ 
+# map of objects with nested lists of objects (from stacks/10-network/dev.tfvars)
+security_groups = {
+  kafka = {
+    description = "Kafka and Kafka UI EC2 access"
+    ingress = [
+      { description = "Kafka UI", from_port = 8080, to_port = 8080, cidr_ipv4 = "ALLOWED_CIDR" }
+    ]
+  }
+}
+
+
+Rules of thumb:
+* Commas between items on one line; newlines are enough when each item is on its own line.
+* Trailing commas are allowed.
+* Comments: # or // for a line, /* */ for blocks.
+* Keys that are not valid identifiers need quotes: "my-key" = 1.
+JSON tfvars
+Machines (CI, other tools) often prefer JSON. dev.tfvars.json:
+{
+  "aws_region": "us-east-1",
+  "tags": { "Environment": "dev" },
+  "keycloak": { "instance_type": "t3.small", "root_volume_size": 20 }
+}
+
+
+Setting complex values on the command line
+terraform apply -var 'tags={Environment="dev"}' -var 'instance_types_for_az_selection=["t3.small"]'
+export TF_VAR_tags='{Environment="dev"}'
+
+
+Layering tfvars per environment
+terraform apply -var-file=common.tfvars -var-file=prod.tfvars
+
+
+common.tfvars holds shared values; prod.tfvars overrides only what differs. Later files win.
+Locals — computed values
+locals {
+  name_prefix = "${var.project_name}-${var.environment}"
+  common_tags = merge(var.tags, { Project = var.project_name })
+  subnet_id   = var.network.subnet_id != null ? var.network.subnet_id : try(local.net.public_subnet_ids[var.network.subnet_key], null)
+}
+
+
+* Locals can reference variables, resources, data sources, other locals and modules.
+* They are evaluated lazily — a local that is never used costs nothing.
+* Use them to give a name to any expression you write more than once, or any expression that is hard to read inline.
+BEST PRACTICE
+When a local grows past three lines, break it into smaller locals with descriptive names. local.security_groups in the network stack is the upper limit of what should live in one expression.
+	
+
+Outputs — every argument
+output "keycloak_admin_password" {
+  description = "Generated Keycloak administrator password."
+  value       = local.keycloak_admin_password
+  sensitive   = true
+  depends_on  = [module.keycloak]
+  precondition {
+    condition     = local.keycloak_admin_password != null
+    error_message = "No admin password was generated or supplied."
+  }
+}
+
+
+Reading outputs:
+terraform output                              # all, sensitive hidden
+terraform output keycloak_admin_password      # prints (sensitive) — refuses
+terraform output -raw keycloak_admin_password # prints the value for scripts
+terraform output -json                        # machine-readable, includes sensitive
+terraform output -json security_group_ids | jq -r .keycloak
+
+
+Outputs are how modules and stacks communicate. In a child module, outputs become module.name.output. In a root module, outputs become readable via terraform_remote_state.
+GOTCHA
+A sensitive value that flows into a non-sensitive output causes an error: "Output refers to sensitive values." Either mark the output sensitive = true or (rarely, deliberately) wrap with nonsensitive().
+	
+
+Sensitive values end to end
+Where
+	Behaviour
+	variable { sensitive = true }
+	Value hidden in plans; anything derived is also sensitive
+	random_password.x.result
+	Sensitive automatically
+	Passed into templatefile()
+	Result is sensitive (our user data)
+	Launch template user_data
+	Shown as (sensitive value) in plan
+	State file
+	Stored in plain text — protect the state
+	output { sensitive = true }
+	Hidden by terraform output, visible with -raw/-json
+	
+
+Chapter Quiz
+Q1. A variable with no default is:
+a) Optional
+b) Required — the caller must supply it
+c) Always null
+d) Invalid
+Q2. Which is auto-loaded?
+a) prod.tfvars
+b) prod.auto.tfvars
+c) vars.hcl
+d) settings.tf
+Q3. When two -var-file flags set the same variable, which wins?
+a) The first
+b) The last
+c) Error
+d) The default
+Q4. What does can(cidrhost(var.x, 0)) do in a validation?
+a) Creates a host
+b) Returns true only if var.x is a valid CIDR
+c) Reserves an IP
+d) Nothing
+Q5. Where are sensitive values stored unencrypted?
+a) In the plan output
+b) In terraform output
+c) In the state file
+d) Nowhere
+________________
+
+
+Chapter 9: Functions and Expressions Cookbook
+Terraform has no user-defined functions, but it has about 150 built-in ones. You cannot define your own; instead you combine built-ins with locals and modules. This chapter is a cookbook: each recipe shows the expression, what it produces, and where the project uses it.
+Operators
+Kind
+	Operators
+	Example
+	Arithmetic
+	+ - * / %
+	var.size * 2
+	Comparison
+	== != < > <= >=
+	length(x) > 0
+	Logical
+	`&&
+	
+
+	Conditional
+	cond ? a : b
+	var.enabled ? 1 : 0
+	
+
+GOTCHA
+Both branches of ? : must be the same type. var.x ? "a" : 1 is an error; var.x ? "a" : null is fine.
+	
+
+Recipe: make something optional
+count = var.create_internet_gateway ? 1 : 0
+# then reference with [0] and protect with try():
+gateway_id = aws_internet_gateway.this[0].id
+output "igw" { value = try(aws_internet_gateway.this[0].id, null) }
+
+
+Recipe: user override, else discover
+ami_id = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ami[0].value
+
+
+Recipe: build a map from a resource
+output "public_subnet_ids" {
+  value = { for k, s in aws_subnet.public : k => s.id }
+}
+
+
+Recipe: filter a list
+[for v in var.list : v if v != null]           # drop nulls
+[for s in var.subnets : s.id if s.public]      # only public
+
+
+Recipe: transform a map of objects
+{ for k, sg in var.security_groups : k => merge(sg, { ingress = [for r in sg.ingress : merge(r, { cidr_ipv4 = r.cidr_ipv4 == "ALLOWED_CIDR" ? var.allowed_cidr : r.cidr_ipv4 })] }) }
+
+
+Read it inside-out: for each rule, replace the placeholder; for each group, replace its rule list; produce a new map with the same keys.
+Recipe: nested loops → flat list → for_each
+locals {
+  rules = flatten([
+    for sg_key, sg in var.security_groups : [
+      for idx, r in sg.ingress : merge(r, { id = "${sg_key}-${idx}", sg_key = sg_key })
+    ]
+  ])
+}
+resource "aws_vpc_security_group_ingress_rule" "this" {
+  for_each = { for r in local.rules : r.id => r }
+  ...
+}
+
+
+This "flatten then key by id" pattern is the standard way to create resources from nested data.
+Recipe: group by
+{ for s in var.subnets : s.az => s.id... }     # the ... groups values into lists per key
+
+
+Recipe: pick the first AZ common to all instance types
+sort(tolist(setintersection(local.az_sets...)))[0]
+
+
+Recipe: conditional nested block
+dynamic "iam_instance_profile" {
+  for_each = var.iam_instance_profile_name == null ? [] : [1]
+  content { name = var.iam_instance_profile_name }
+}
+
+
+Empty list = no block; one-item list = one block. For a list of blocks, for_each = var.additional_volumes and use block_device_mappings.value.field inside content.
+Recipe: splat and try
+aws_instance.web[*].id           # list of all IDs (count resources)
+values(aws_subnet.public)[*].id  # same idea for for_each resources
+try(module.kafka[0].id, null)    # safe lookup
+
+
+Recipe: coalesce and defaults
+coalesce(var.az, local.auto_az)                # first non-null/non-empty
+coalescelist(var.sgs, [local.default_sg])       # first non-empty list
+lookup(var.tags, "Owner", "unassigned")
+
+
+Recipe: templates
+templatefile("${path.module}/templates/user_data.sh.tftpl", {
+  docker_compose_b64 = base64encode(local.compose)
+  keycloak_private_ip = local.keycloak_private_ip
+})
+
+
+Inside the template, only the names you pass are visible. Loops:
+%{ for h in hosts ~}
+server ${h.name} ${h.ip};
+%{ endfor ~}
+
+
+Recipe: encoding
+Function
+	Use
+	base64encode / base64decode
+	User data, secrets in transit
+	jsonencode / jsondecode
+	IAM policies, API payloads
+	yamlencode / yamldecode
+	Kubernetes, compose files
+	urlencode
+	Query strings
+	sha256, md5, filesha256
+	Trigger replacement when a file changes
+	
+
+policy = jsonencode({
+  Version   = "2012-10-17"
+  Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "ec2.amazonaws.com" } }]
+})
+
+
+Recipe: network math
+Function
+	Example
+	Result
+	cidrsubnet(prefix, newbits, num)
+	cidrsubnet("10.40.0.0/16", 8, 1)
+	"10.40.1.0/24"
+	cidrhost(prefix, n)
+	cidrhost("10.40.1.0/24", 10)
+	"10.40.1.10"
+	cidrnetmask
+	cidrnetmask("10.40.0.0/16")
+	"255.255.0.0"
+	cidrsubnets(prefix, bits...)
+	cidrsubnets("10.40.0.0/16", 8, 8)
+	["10.40.0.0/24","10.40.1.0/24"]
+	
+
+Use cidrsubnet to derive subnet ranges from the VPC range instead of typing them, so they can never overlap:
+public_subnets = { for i, az in var.azs : "public-${az}" => { cidr_block = cidrsubnet(var.vpc_cidr, 8, i), availability_zone = az } }
+
+
+Recipe: date, numbers, misc
+Function
+	Example
+	timestamp()
+	Current UTC time — avoid in resources (changes every plan)
+	formatdate("YYYY-MM-DD", timestamp())
+	Formatted date
+	max, min, abs, ceil, floor
+	Numbers
+	uuid()
+	Random each plan — avoid
+	fileexists, file, fileset
+	Files relative to path.module
+	sensitive(x), nonsensitive(x)
+	Mark / unmark
+	type(x)
+	In console, show type
+	
+
+Path and workspace references
+Reference
+	Value
+	path.module
+	Folder of the current module (use for templatefile, file)
+	path.root
+	Folder of the root module
+	path.cwd
+	Where you ran terraform (avoid)
+	terraform.workspace
+	Current workspace name (default)
+	
+
+Testing expressions
+terraform console lets you try any expression against the current state and variables:
+$ terraform -chdir=stacks/10-network console -var-file=dev.tfvars
+> cidrsubnet(var.vpc_cidr, 8, 2)
+"10.40.2.0/24"
+> keys(var.security_groups)
+["kafka", "keycloak"]
+> local.security_groups.keycloak.ingress[1].source_security_group_key
+"kafka"
+
+
+Chapter Quiz
+Q1. Can you define your own function in Terraform?
+a) Yes, with function blocks
+b) No — combine built-ins with locals and modules
+c) Only in modules
+d) Only in Go
+Q2. cidrsubnet("10.0.0.0/16", 8, 3) returns:
+a) 10.0.3.0/24
+b) 10.3.0.0/24
+c) 10.0.0.3/32
+d) 10.0.8.0/24
+Q3. What does an empty list in a dynamic block's for_each produce?
+a) An error
+b) One empty block
+c) No block at all
+d) A null block
+Q4. Why avoid timestamp() in a resource argument?
+a) It is slow
+b) It changes every plan, causing perpetual diffs
+c) It is deprecated
+d) It needs a provider
+Q5. Which tool lets you evaluate expressions interactively?
+a) terraform test
+b) terraform console
+c) terraform show
+d) terraform graph
+________________
+
+
+Chapter 10: Resources in Depth — Required Settings and How to Read the Docs
+Anatomy of a resource block
+resource "aws_subnet" "public" {          # 1. type   2. local name
+  for_each = var.public_subnets           # meta-argument (optional)
+ 
+  vpc_id     = aws_vpc.this.id            # required argument
+  cidr_block = each.value.cidr_block      # required argument
+  availability_zone = "us-east-1a"        # optional argument
+ 
+  tags = { Name = "public" }              # optional argument (map)
+ 
+  lifecycle {                             # meta-argument block (optional)
+    precondition { ... }
+  }
+ 
+  depends_on = [aws_internet_gateway.this] # meta-argument (optional)
+}
+
+
+Part
+	Rule
+	Type (aws_subnet)
+	Provider prefix + resource name. Must exist in the provider.
+	Local name (public)
+	Letters, digits, underscores, dashes. Unique per type within a module.
+	Arguments
+	What you set. Some required, most optional.
+	Attributes
+	What AWS returns (id, arn, private_ip). Read-only; available after apply.
+	Meta-arguments
+	count, for_each, depends_on, provider, lifecycle. Work on every resource type.
+	
+
+NOTE
+The difference between an argument and an attribute confuses everyone at first. cidr_block is an argument you set. id is an attribute AWS assigns. Some names are both: you can set availability_zone and also read it back.
+	
+
+Reading the provider documentation
+Every resource page at https://registry.terraform.io/providers/hashicorp/aws/latest/docs has the same layout:
+1. Example Usage – copy this to start.
+2. Argument Reference – each argument marked (Required) or (Optional), with defaults. This is the list of "required settings."
+3. Attribute Reference – what you can read after apply (id, arn, computed values).
+4. Import – how to bring an existing resource under management.
+5. Timeouts – if the resource supports custom timeouts.
+TIP
+Before writing a resource, read only the Argument Reference and note the (Required) items. That is the minimum block. Add optional arguments one at a time as you need them.
+	
+
+Required arguments for every resource in the project
+Resource
+	Required
+	Commonly used optional
+	aws_vpc
+	cidr_block (or IPAM)
+	enable_dns_support, enable_dns_hostnames, tags
+	aws_internet_gateway
+	(none)
+	vpc_id (practically always), tags
+	aws_subnet
+	vpc_id, cidr_block
+	availability_zone, map_public_ip_on_launch, tags
+	aws_route_table
+	vpc_id
+	tags (avoid inline route)
+	aws_route
+	route_table_id, one destination (destination_cidr_block), one target (gateway_id, nat_gateway_id, …)
+	
+
+	aws_route_table_association
+	route_table_id, and subnet_id or gateway_id
+	
+
+	aws_eip
+	(none)
+	domain = "vpc", tags
+	aws_nat_gateway
+	subnet_id; allocation_id for public NAT
+	connectivity_type, tags
+	aws_security_group
+	(none)
+	vpc_id, name/name_prefix, description, tags
+	aws_vpc_security_group_ingress_rule
+	security_group_id, ip_protocol, and one source (cidr_ipv4, cidr_ipv6, referenced_security_group_id, prefix_list_id)
+	from_port, to_port (required unless protocol -1), description
+	aws_iam_role
+	assume_role_policy
+	name/name_prefix, description, tags
+	aws_iam_role_policy_attachment
+	role, policy_arn
+	
+
+	aws_iam_role_policy
+	role, policy
+	name
+	aws_iam_instance_profile
+	(none, but role practically)
+	name/name_prefix
+	aws_launch_template
+	(none)
+	image_id, instance_type, user_data, network_interfaces, block_device_mappings, metadata_options
+	aws_instance
+	ami + instance_type, or launch_template
+	subnet_id, vpc_security_group_ids, iam_instance_profile, user_data, tags
+	aws_eip_association
+	allocation_id (or public_ip), and instance_id or network_interface_id
+	
+
+	random_password
+	length
+	special, override_special, min_upper …
+	
+
+GOTCHA
+"Required by Terraform" and "required by AWS" differ. aws_security_group has no required arguments in Terraform, but without vpc_id it lands in the default VPC — almost never what you want. Read the description, not just the (Required) tag.
+	
+
+Nested blocks vs map arguments
+Some settings are nested blocks (no =), others are maps (with =). The docs tell you which.
+network_interfaces {              # nested block: no equals sign
+  subnet_id = var.subnet_id
+}
+tags = {                          # map argument: equals sign
+  Name = "x"
+}
+
+
+A nested block that may repeat (block_device_mappings) can appear several times or be generated with dynamic.
+Data sources — reading instead of creating
+data "aws_ssm_parameter" "ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
+data "aws_ec2_instance_type_offerings" "by_type" {
+  location_type = "availability-zone"
+  filter { name = "instance-type", values = ["t3.medium"] }
+}
+data "aws_caller_identity" "current" {}     # account ID
+data "aws_region" "current" {}
+data "aws_availability_zones" "available" { state = "available" }
+
+
+Data sources are refreshed on every plan. Reference with data.<type>.<name>.<attribute>.
+The lifecycle block — every option
+lifecycle {
+  create_before_destroy = true                 # build replacement first (SGs, launch templates)
+  prevent_destroy       = true                 # plan fails if this would be destroyed (databases, state buckets)
+  ignore_changes        = [tags["LastScanned"], user_data]   # ignore drift on these arguments
+  replace_triggered_by  = [aws_launch_template.this.latest_version]   # replace when another thing changes
+  precondition  { condition = ..., error_message = "..." }   # checked before apply
+  postcondition { condition = self.state == "available", error_message = "..." }  # checked after
+}
+
+
+GOTCHA
+ignore_changes cannot use variables; it must be a static list. Our EC2 module had exactly this bug in an early draft and it was removed.
+	
+
+moved and removed blocks — refactoring safely
+When you rename a resource or move it into a module, Terraform would plan a destroy + create. A moved block tells it "same thing, new address":
+moved {
+  from = aws_vpc.main
+  to   = module.vpc.aws_vpc.this
+}
+
+
+removed (1.7+) drops a resource from state without destroying it:
+removed {
+  from = aws_instance.old
+  lifecycle { destroy = false }
+}
+
+
+These are how you would migrate the original single-file project into the modular one without rebuilding.
+import block — adopting existing resources
+import {
+  to = module.vpc.aws_vpc.this
+  id = "vpc-0123456789abcdef0"
+}
+
+
+Run terraform plan -generate-config-out=generated.tf to have Terraform write the resource block for you.
+Provisioners — know them, avoid them
+provisioner "remote-exec" and local-exec run scripts during create/destroy. They are a last resort: they are not idempotent, cannot be planned, and break the declarative model. Use user data, SSM Run Command, or configuration tools instead. Our project uses user data only.
+Timeouts
+timeouts {
+  create = "10m"
+  delete = "20m"
+}
+
+
+Only for resources that support it (RDS, EKS, NAT gateways). Rarely needed for the resources here.
+Resource addresses
+You will see and type these in state, -target, -replace, moved:
+Address
+	Meaning
+	aws_vpc.this
+	Plain resource
+	aws_subnet.public["public-a"]
+	for_each instance
+	aws_internet_gateway.this[0]
+	count instance
+	module.vpc.aws_vpc.this
+	Inside a module
+	module.instance_roles["ec2_ssm"].aws_iam_role.this
+	Inside a for_each module
+	module.kafka[0].aws_instance.this
+	Inside a count module
+	data.aws_ssm_parameter.ami[0]
+	Data source with count
+	
+
+Chapter Quiz
+Q1. Where do you find a resource's required arguments?
+a) Attribute Reference
+b) Argument Reference, marked (Required)
+c) Import section
+d) The AWS console
+Q2. id on aws_vpc is:
+a) An argument you set
+b) An attribute AWS assigns
+c) A meta-argument
+d) A variable
+Q3. What does a moved block do?
+a) Moves the resource to another region
+b) Tells Terraform a resource has a new address, avoiding destroy/create
+c) Deletes it
+d) Renames the AWS Name tag
+Q4. Which is a nested block, not a map?
+a) tags
+b) network_interfaces
+c) description
+d) instance_type
+Q5. Why avoid provisioners?
+a) They cost money
+b) They are not idempotent or plannable and break the declarative model
+c) They are removed in Terraform 1.6
+d) They only work on Windows
+________________
+
+
+Chapter 11: Modules in Depth — Writing One From Scratch
+Step 1 – Decide the module's job
+One job, clearly stated. Good: "Create an EC2 launch template with hardened defaults." Bad: "Create the whole Kafka environment." A module that does one thing composes; a module that does everything is a copy of the root.
+REAL-WORLD ANALOGY
+A window factory makes windows. It does not also pour foundations. The builder (root module) orders windows, doors and trusses from different factories and assembles them.
+	
+
+Step 2 – List inputs, then decide which have defaults
+Write the variables file first. Ask for each input: Would two callers ever want different values? If yes, it is a variable. Then: Is there a value that is right 80% of the time? If yes, that is the default.
+variable "name"              { type = string }                  # required
+variable "image_id"          { type = string }                  # required
+variable "instance_type"     { type = string }                  # required
+variable "subnet_id"         { type = string }                  # required
+variable "security_group_ids"{ type = list(string) }            # required
+variable "root_volume_size"  { type = number, default = 20 }    # default
+variable "require_imdsv2"    { type = bool,   default = true }  # secure default
+variable "user_data"         { type = string, default = null, sensitive = true }
+variable "tags"              { type = map(string), default = {} }
+
+
+Step 3 – Write the resources
+Reference only var., local. and resources inside the module. Never reference module.something from the root or hard-code account-specific values.
+Step 4 – Expose outputs
+Output every attribute a caller could plausibly need: id, arn, name, computed values. Outputs are free; missing outputs force callers to hack around the module.
+Step 5 – Add versions.tf, no provider block
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.0" }
+  }
+}
+
+
+GOTCHA
+A provider "aws" { region = ... } block inside a child module is a legacy pattern. It prevents count/for_each on the module and makes it non-reusable. The root declares providers; children inherit them.
+	
+
+Step 6 – Document and test
+Add a README.md (inputs, outputs, example). Tools like terraform-docs generate it from your variable descriptions. Add a tests/ folder with .tftest.hcl files (Chapter 23).
+Calling a module — every meta-argument
+module "kafka_launch_template" {
+  source  = "../../modules/launch_template"   # required
+  version = "1.2.0"                            # registry/git modules only
+  count   = var.kafka.enabled ? 1 : 0          # or for_each
+  providers = { aws = aws.west }               # only when using an aliased provider
+  depends_on = [module.network]                # rarely needed; prefer output references
+ 
+  name          = "${var.project_name}-kafka"  # module inputs
+  image_id      = local.ami_id
+  ...
+}
+
+
+Module composition patterns
+Base + wrapper. launch_template (base) is called by the apps stack for each service. A future modules/ec2_service could wrap launch_template + ec2_instance + elastic_ip into one call — a wrapper module.
+Facade for a stack. The network stack is a facade: it hides the VPC, SG and IAM modules behind one tfvars file and one set of outputs.
+Passing data between modules. Always via outputs → inputs:
+module "security_groups" {
+  vpc_id = module.vpc.vpc_id      # output of one module into input of another
+}
+
+
+Terraform infers the ordering. Do not use depends_on between modules unless there is truly no data flowing.
+Module versioning and sources
+Source
+	Pin with
+	Example
+	Local path
+	(git commit)
+	"../../modules/vpc"
+	Terraform Registry
+	version
+	source = "terraform-aws-modules/vpc/aws", version = "~> 5.0"
+	GitHub
+	?ref=
+	"git::https://github.com/org/modules.git//vpc?ref=v1.4.0"
+	S3 / GCS bucket
+	object key
+	"s3::https://s3.amazonaws.com/bucket/vpc.zip"
+	
+
+Run terraform init -upgrade to pick up newer module versions within your constraints; terraform get refreshes local module references.
+Refactoring resources into modules
+Moving aws_vpc.main from the root into module.vpc without recreating it:
+moved {
+  from = aws_vpc.main
+  to   = module.vpc.aws_vpc.this
+}
+moved {
+  from = aws_subnet.public
+  to   = module.vpc.aws_subnet.public["public-a"]
+}
+
+
+Apply once, then delete the moved blocks. This is the safe way to do what the README's migration table describes.
+Providers and modules
+Same provider, different region (e.g. a DR copy):
+provider "aws" { region = "us-east-1" }
+provider "aws" { alias = "west", region = "us-west-2" }
+ 
+module "vpc_west" {
+  source    = "../../modules/vpc"
+  providers = { aws = aws.west }
+  ...
+}
+
+
+The module's versions.tf should declare configuration_aliases = [aws] only if it needs multiple providers itself; for the common case, nothing extra is needed.
+Module design checklist
+* One responsibility
+* Required inputs minimal; secure defaults for the rest
+* Every input has type and description
+* validation on formats
+* No provider blocks, no hard-coded regions/accounts/CIDRs
+* Names built from a name input; caller tags merged in
+* Outputs for every ID/ARN/name
+* versions.tf with constraints
+* README and tests
+Chapter Quiz
+Q1. What is the first step when writing a module?
+a) Write outputs
+b) Decide its single job
+c) Pick a provider version
+d) Write the README
+Q2. How should data pass from module A to module B?
+a) Shared locals
+b) A's outputs into B's inputs
+c) depends_on only
+d) Environment variables
+Q3. Which is legacy and blocks for_each on a module?
+a) versions.tf in the module
+b) A provider block inside the child module
+c) Outputs
+d) Validation
+Q4. How do you move a resource into a module without recreating it?
+a) terraform destroy then apply
+b) A moved block
+c) Edit the state by hand
+d) Rename the tag
+Q5. What does providers = { aws = aws.west } do?
+a) Installs a provider
+b) Passes an aliased provider configuration into the module
+c) Creates a region
+d) Nothing
+________________
+
+
+Chapter 12: What to Avoid — Terraform Anti-Patterns
+Each item: the mistake, why it hurts, and what to do instead.
+Structure and code
+Avoid
+	Why it hurts
+	Instead
+	One giant main.tf with everything (the original project)
+	Unreadable, one state = one blast radius
+	Modules + stacks
+	Copy-pasting resource blocks for each server
+	Fixes must be made N times
+	A module, called N times
+	Hard-coded IDs (subnet-0abc…) in code
+	Breaks in every other account/region
+	Variables, data sources, remote state
+	Hard-coded regions or account IDs
+	Same
+	var.aws_region, data.aws_caller_identity
+	Values inside modules
+	Module is not reusable
+	Variables with defaults
+	type = any everywhere
+	No validation, confusing errors
+	Precise types with optional()
+	Provider blocks in child modules
+	Cannot count/for_each, not reusable
+	Providers in root only
+	Inline route/ingress blocks mixed with standalone aws_route/rule resources
+	Perpetual diffs, rules flapping
+	Choose one style — standalone (as the project does)
+	count for lists of named things
+	Removing one item renumbers and recreates the rest
+	for_each with a map
+	Deeply nested modules (module in module in module)
+	Hard to trace, slow plans
+	Two levels: base modules + stack
+	
+
+State
+Avoid
+	Why it hurts
+	Instead
+	Local state for a team
+	No locking, no sharing, easy to lose
+	S3 backend with locking and versioning
+	Committing terraform.tfstate to Git
+	Secrets in history, merge conflicts
+	.gitignore it; remote backend
+	Editing state JSON by hand
+	Corrupts state
+	state mv, moved, import, removed
+	-target for routine applies
+	Partial state, hidden dependencies
+	Full applies; split into stacks if too big
+	Two people applying at once
+	Corruption
+	Locking; CI as the single applier
+	One state for everything
+	A typo can destroy prod networking
+	Stacks per blast radius, per environment
+	
+
+Security
+Avoid
+	Why it hurts
+	Instead
+	Access keys in .tf or tfvars
+	Leaked in Git forever
+	CLI profiles, SSO, CI OIDC roles
+	Passwords in tfvars committed to Git
+	Same
+	random_password, Secrets Manager, TF_VAR_ in CI secrets
+	0.0.0.0/0 on SSH/admin ports
+	Bots find it within minutes
+	allowed_cidr = YOUR_IP/32, SSM instead of SSH
+	IMDSv1 (http_tokens = "optional")
+	Credential theft via SSRF
+	required
+	Unencrypted EBS/RDS/S3
+	Compliance failures
+	encrypted = true (our default)
+	AdministratorAccess on instance roles
+	Any compromise = full account
+	Least privilege
+	Printing sensitive outputs in CI logs
+	Leak
+	sensitive = true, mask in CI
+	
+
+Plans, applies and drift
+Avoid
+	Why it hurts
+	Instead
+	terraform apply -auto-approve without reading a plan
+	Surprise deletions
+	Read plans; -out then apply the file
+	Ignoring "forces replacement"
+	Data loss
+	Understand why; use create_before_destroy, ignore_changes, or accept it
+	timestamp(), uuid() in resource arguments
+	Diff on every plan
+	Static values or ignore_changes
+	Unpinned providers/modules (version missing)
+	Breaks randomly when upstream changes
+	~> constraints, lock file committed
+	Manual console changes to Terraform-managed resources
+	Drift; next apply reverts them
+	Change the code, or import
+	Data sources that change over time (latest AMI) in production
+	Unplanned instance replacement
+	Pin ami_id
+	
+
+Scripts and user data
+Avoid
+	Why it hurts
+	Instead
+	sleep 60 to "wait" for a service
+	Flaky
+	Poll for readiness (our loops)
+	Scripts without set -euo pipefail
+	Silent partial failures
+	Fail fast, log everything
+	Assuming user data re-runs on change
+	It doesn't
+	Replace instances or use SSM Run Command
+	Provisioners (remote-exec)
+	Unplannable, non-idempotent
+	User data, SSM, config management
+	Secrets baked into AMIs or user data
+	Readable by anyone with instance access
+	Fetch from Secrets Manager at boot
+	
+
+Naming and tags
+Avoid
+	Why it hurts
+	Instead
+	name on resources that get replaced (SGs, launch templates)
+	"already exists" errors during replacement
+	name_prefix + create_before_destroy
+	Untagged resources
+	Mystery costs, no ownership
+	default_tags + Name tags
+	Meaningless local names (aws_vpc.vpc1)
+	Hard to read
+	this for singletons, role-based names otherwise
+	
+
+Reading error messages
+Terraform's errors are precise. Read the first error, the file and line, and the "on ... line N, in resource ..." pointer. Common ones:
+Message
+	Meaning
+	"Unsupported argument"
+	Typo, or the argument does not exist for this resource/version
+	"Missing required argument"
+	Add it (check the docs)
+	"Invalid for_each argument… depends on resource attributes that cannot be determined until apply"
+	Use a static map/set, or apply in two steps
+	"Cycle: …"
+	A → B → A dependency loop; split as in the SG module
+	"Error acquiring the state lock"
+	Someone else is applying, or a crashed run left a lock (force-unlock only if sure)
+	"DependencyViolation"
+	AWS refuses to delete something still in use — wrong destroy order across stacks
+	"Output refers to sensitive values"
+	Mark the output sensitive
+	"Inconsistent conditional result types"
+	Both ? : branches must match types
+	
+
+Chapter Quiz
+Q1. Why prefer for_each over count for named things?
+a) It is faster
+b) Removing one item does not renumber and recreate the rest
+c) count is deprecated
+d) for_each supports tags
+Q2. What is the safe response to a "Cycle" error?
+a) Add depends_on
+b) Split the resources so the cycle breaks (e.g. rules separate from groups)
+c) Use -target
+d) Delete state
+Q3. Why is -auto-approve risky?
+a) It is slow
+b) You never see the plan before destructive changes
+c) It disables locking
+d) It skips validation
+Q4. What happens to a manual console change on a Terraform-managed resource?
+a) Terraform adopts it
+b) It is reported as drift and reverted on the next apply
+c) Nothing
+d) It becomes a variable
+Q5. "DependencyViolation" during destroy usually means:
+a) A syntax error
+b) Something outside this stack still uses the resource — wrong order
+c) A provider bug
+d) State corruption
+________________
+
+
+Chapter 13: Project Tour
+What we are building
+                 Internet
+                    |
+             [Internet Gateway]
+                    |
+   +--------------- VPC 10.40.0.0/16 ----------------+
+   |                                                 |
+   |   +-------- public-a 10.40.1.0/24 ---------+    |
+   |   |                                        |    |
+   |   |  [Keycloak EC2] <---8443---- [Kafka EC2]|    |
+   |   |   EIP  t3.small     (private) EIP t3.med|    |
+   |   |   :8443 :9000               :8080       |    |
+   |   +----------------------------------------+    |
+   +-------------------------------------------------+
+        ^ your laptop: 8443 (Keycloak), 8080 (Kafka UI)
+
+
+* Keycloak – identity server. Runs in Docker with a self-signed HTTPS certificate. Imports a realm containing the kafka-ui client and a demo user.
+* Kafka – a single-node message broker in KRaft mode (no ZooKeeper). Only reachable inside its own Docker network.
+* Kafka UI – a web app on port 8080. When you open it, it redirects your browser to Keycloak to log in, then verifies the token by calling Keycloak over the private VPC address.
+Folder layout
+kafka-keycloak-terraform/
+├── modules/
+│   ├── vpc/                 VPC, IGW, subnets, route tables, optional NAT
+│   ├── security_groups/     map-driven SGs; rules reference each other by key
+│   ├── iam_instance_role/   role + policies + instance profile
+│   ├── elastic_ip/          one EIP
+│   ├── launch_template/     hardened base launch template
+│   └── ec2_instance/        instance from a launch template + EIP association
+├── stacks/
+│   ├── 10-network/          PROCESS 1: VPC, subnets, SGs, IAM
+│   │   ├── main.tf variables.tf outputs.tf providers.tf versions.tf
+│   │   └── dev.tfvars
+│   └── 20-apps/             PROCESS 2: Keycloak + Kafka/Kafka UI
+│       ├── main.tf locals.tf data.tf variables.tf outputs.tf providers.tf versions.tf
+│       ├── files/           docker-compose, keycloak realm, kafka-ui config templates
+│       ├── templates/       user-data shell scripts
+│       └── dev.tfvars
+├── Makefile
+└── README.md
+
+
+Why two processes?
+REAL-WORLD ANALOGY
+When a school is built, the foundation, walls, plumbing and electrical go in first and rarely change. The furniture, computers and whiteboards change every year. You would not tear out a wall to replace a desk. The network stack is the building; the apps stack is the furniture.
+	
+
+Practical benefits:
+* Applying the apps stack cannot touch the VPC, even by accident.
+* The network can be built once by a platform team and reused by many app stacks.
+* Smaller plans are faster to run and easier to review.
+* Different backends, permissions and change-approval rules per stack.
+How the stacks talk
+The network stack ends with output blocks. The apps stack reads them with a terraform_remote_state data source, then looks things up by key: public_subnet_ids["public-a"], security_group_ids["keycloak"], instance_profile_names["ec2_ssm"]. The keys are set in dev.tfvars, so you can rename or add subnets without touching code. If you already have a VPC, pass the raw IDs instead and the remote state read is skipped.
+Reading order
+The chapters that follow walk through every file: modules first (the building blocks), then the network stack (process 1), then the apps stack (process 2), then deployment and verification. Each code listing is followed by a line-by-line table explaining what the line does, why it exists, and how it works.
+Chapter Quiz
+Q1. Which server does your browser talk to on port 8080?
+a) Keycloak
+b) Kafka broker
+c) Kafka UI
+d) The Internet Gateway
+Q2. How does Kafka UI verify a login token?
+a) It asks Kafka
+b) It calls Keycloak over the private VPC address on 8443
+c) It checks a local file
+d) It asks your laptop
+Q3. The 10- and 20- prefixes on stack folders indicate:
+a) Version numbers
+b) Run order
+c) Port numbers
+d) Nothing
+Q4. Where do compose files and startup scripts live?
+a) modules/
+b) stacks/10-network
+c) stacks/20-apps/files and templates
+d) The AWS console
+Q5. What passes information from the network stack to the apps stack?
+a) Environment variables
+b) Outputs read through remote state
+c) Copying IDs by hand
+d) Tags
+________________
+
+
+Chapter 14: The VPC Module, Line by Line
+Folder: modules/vpc/. This module is the "building": VPC, front door (IGW), rooms (subnets), and exit signs (route tables).
+variables.tf
+variable "name"                    { type = string }
+variable "cidr_block"              { type = string }
+variable "enable_dns_support"      { type = bool, default = true }
+variable "enable_dns_hostnames"    { type = bool, default = true }
+variable "create_internet_gateway" { type = bool, default = true }
+variable "default_availability_zone" { type = string, default = null }
+ 
+variable "public_subnets" {
+  type = map(object({
+    cidr_block              = string
+    availability_zone       = optional(string)
+    map_public_ip_on_launch = optional(bool, true)
+    tags                    = optional(map(string), {})
+  }))
+  default = {}
+}
+ 
+variable "private_subnets" {
+  type = map(object({
+    cidr_block        = string
+    availability_zone = optional(string)
+    tags              = optional(map(string), {})
+  }))
+  default = {}
+}
+ 
+variable "create_nat_gateway" { type = bool, default = false }
+variable "tags"               { type = map(string), default = {} }
+
+
+Variable
+	What
+	Why
+	name
+	Prefix for every Name tag
+	Lets you tell projects apart in the console
+	cidr_block
+	VPC address range
+	Required by AWS
+	enable_dns_*
+	Turn on AWS's internal DNS
+	Needed so instances get hostnames; SSM and many services expect it
+	create_internet_gateway
+	Build the front door?
+	A fully private VPC would set this false
+	default_availability_zone
+	Fallback AZ
+	Subnets that don't pin an AZ use this; the network stack computes it
+	public_subnets
+	Map of subnets
+	A map means "as many as you like, each with a name"
+	map_public_ip_on_launch
+	Auto-assign public IPs
+	True for public subnets so instances can reach the internet immediately
+	private_subnets
+	Same idea, no internet route
+	Optional; empty by default
+	create_nat_gateway
+	Mail slot for private subnets
+	Off by default because NAT costs money (~$32/month)
+	tags
+	Extra labels
+	Cost tracking, ownership
+	
+
+main.tf – the VPC and gateway
+resource "aws_vpc" "this" {
+  cidr_block           = var.cidr_block
+  enable_dns_support   = var.enable_dns_support
+  enable_dns_hostnames = var.enable_dns_hostnames
+  tags = merge(var.tags, { Name = "${var.name}-vpc" })
+}
+ 
+resource "aws_internet_gateway" "this" {
+  count  = var.create_internet_gateway ? 1 : 0
+  vpc_id = aws_vpc.this.id
+  tags   = merge(var.tags, { Name = "${var.name}-igw" })
+}
+
+
+Line
+	What
+	Why / How
+	resource "aws_vpc" "this"
+	Create the VPC
+	this is a common name for "the one thing this module makes"
+	cidr_block = var.cidr_block
+	Address range
+	Comes from the caller
+	enable_dns_hostnames
+	Give instances DNS names
+	Without it, ip-10-40-1-5.ec2.internal names don't resolve
+	merge(var.tags, {Name=...})
+	Combine caller tags with a Name
+	merge lets caller tags apply everywhere while the module controls Name
+	count = ... ? 1 : 0
+	Optional IGW
+	Terraform idiom: count of 0 means "don't create"
+	vpc_id = aws_vpc.this.id
+	Attach IGW to VPC
+	Implicit dependency: VPC first
+	
+
+main.tf – public subnets
+resource "aws_subnet" "public" {
+  for_each = var.public_subnets
+ 
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = each.value.cidr_block
+  availability_zone       = coalesce(each.value.availability_zone, var.default_availability_zone)
+  map_public_ip_on_launch = each.value.map_public_ip_on_launch
+ 
+  lifecycle {
+    precondition {
+      condition     = coalesce(each.value.availability_zone, var.default_availability_zone, "unset") != "unset"
+      error_message = "Subnet '${each.key}' has no availability_zone and no default_availability_zone was supplied."
+    }
+  }
+ 
+  tags = merge(var.tags, each.value.tags, { Name = "${var.name}-${each.key}", Tier = "public" })
+}
+
+
+Line
+	What
+	Why / How
+	for_each = var.public_subnets
+	One subnet per map entry
+	Key becomes part of the address: aws_subnet.public["public-a"]
+	each.value.cidr_block
+	This subnet's range
+	each.value is the object for the current key
+	coalesce(a, b)
+	Per-subnet AZ, else default
+	First non-null wins
+	precondition
+	Fail early with a clear message
+	Better than an AWS error about a null AZ
+	Tier = "public"
+	Extra tag
+	Tools and humans can filter public vs private
+	
+
+resource "aws_route_table" "public" {
+  count  = length(var.public_subnets) > 0 ? 1 : 0
+  vpc_id = aws_vpc.this.id
+  tags   = merge(var.tags, { Name = "${var.name}-public-rt" })
+}
+ 
+resource "aws_route" "public_internet" {
+  count                  = length(var.public_subnets) > 0 && var.create_internet_gateway ? 1 : 0
+  route_table_id         = aws_route_table.public[0].id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this[0].id
+}
+ 
+resource "aws_route_table_association" "public" {
+  for_each       = aws_subnet.public
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.public[0].id
+}
+
+
+Line
+	What
+	Why / How
+	aws_route_table with count
+	One shared table for all public subnets
+	Only if there are public subnets
+	aws_route as a separate resource
+	The 0.0.0.0/0 → IGW route
+	Separate (not inline) so it can be conditional on the IGW existing
+	destination_cidr_block = "0.0.0.0/0"
+	"Everywhere else"
+	The default route
+	for_each = aws_subnet.public
+	One association per subnet
+	You can for_each over a resource's instances directly
+	
+
+GOTCHA
+Never mix inline route { } blocks inside aws_route_table with separate aws_route resources for the same table. They fight each other and Terraform will show changes forever.
+	
+
+main.tf – private subnets and NAT
+The private block mirrors the public one, with a NAT Gateway instead of an IGW route:
+resource "aws_nat_gateway" "this" {
+  count         = var.create_nat_gateway && length(var.private_subnets) > 0 ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = values(aws_subnet.public)[0].id
+  depends_on    = [aws_internet_gateway.this]
+  lifecycle {
+    precondition {
+      condition     = length(var.public_subnets) > 0
+      error_message = "create_nat_gateway requires at least one public subnet."
+    }
+  }
+}
+
+
+Line
+	Why
+	allocation_id = aws_eip.nat[0].id
+	A NAT Gateway needs its own Elastic IP
+	values(aws_subnet.public)[0].id
+	NAT must sit in a public subnet (it needs the IGW)
+	depends_on = [aws_internet_gateway.this]
+	AWS docs require the IGW to exist first; no attribute reference exists, so we say it explicitly
+	
+
+outputs.tf
+output "vpc_id"             { value = aws_vpc.this.id }
+output "public_subnet_ids"  { value = { for k, s in aws_subnet.public : k => s.id } }
+output "private_subnet_ids" { value = { for k, s in aws_subnet.private : k => s.id } }
+output "public_subnet_azs"  { value = { for k, s in aws_subnet.public : k => s.availability_zone } }
+output "internet_gateway_id" { value = try(aws_internet_gateway.this[0].id, null) }
+
+
+The for expressions turn the resource map into a plain key => id map, which is exactly what callers want: module.vpc.public_subnet_ids["public-a"].
+Verify with the AWS CLI
+VPC=$(terraform -chdir=stacks/10-network output -raw vpc_id)
+aws ec2 describe-vpcs --vpc-ids $VPC
+aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values=$VPC
+aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC --output table
+aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC \
+  --query 'RouteTables[].{Id:RouteTableId,Routes:Routes[].{Dest:DestinationCidrBlock,Via:GatewayId}}'
+
+
+OFFICIAL DOCS
+aws_vpc: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc · aws_subnet: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet · aws_route: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route
+	
+
+Chapter Quiz
+Q1. Why is aws_route a separate resource instead of an inline route block?
+a) It is faster
+b) So it can be conditional and avoid inline/separate conflicts
+c) AWS requires it
+d) For tagging
+Q2. What does for_each = aws_subnet.public on the route table association do?
+a) Creates one association for each subnet the module created
+b) Creates one subnet
+c) Errors
+d) Associates all subnets to all tables
+Q3. Where must a NAT Gateway be placed?
+a) In a private subnet
+b) In a public subnet
+c) Outside the VPC
+d) Anywhere
+Q4. What does coalesce(each.value.availability_zone, var.default_availability_zone) return?
+a) Both values
+b) The first non-null value
+c) An error if both are set
+d) null always
+Q5. Why is enable_dns_hostnames true?
+a) For faster networking
+b) So instances get resolvable DNS names, which SSM and services expect
+c) To save money
+d) It is required by Terraform
+________________
+
+
+Chapter 15: The Security Groups Module, Line by Line
+Folder: modules/security_groups/. This is the "hall monitor" module. It takes a map of groups and rules from tfvars and builds them all.
+The design problem it solves
+The Keycloak group needs a rule "allow port 8443 from the Kafka group." If you wrote both groups in one for_each with inline rules, Terraform would see a cycle (Keycloak needs Kafka's ID, which is created in the same loop). The fix: create all groups first with no rules, then create every rule as its own resource that references groups by ID. Since the rules are separate resources, they can look up any group by key.
+REAL-WORLD ANALOGY
+First hire all the hall monitors and give them name tags. Then hand out the rule cards, which can say "let in anyone sent by Monitor Kafka." You could not write that card before Monitor Kafka existed.
+	
+
+variables.tf (the important part)
+variable "security_groups" {
+  type = map(object({
+    description = string
+    tags        = optional(map(string), {})
+    ingress = optional(list(object({
+      description               = optional(string)
+      from_port                 = optional(number)
+      to_port                   = optional(number)
+      protocol                  = optional(string, "tcp")
+      cidr_ipv4                 = optional(string)
+      cidr_ipv6                 = optional(string)
+      source_security_group_key = optional(string)
+      source_security_group_id  = optional(string)
+      self                      = optional(bool, false)
+    })), [])
+    egress = optional(list(object({ ...same fields..., protocol = optional(string, "-1") })),
+      [{ description = "Allow all outbound", protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }])
+  }))
+  validation {
+    condition = alltrue(flatten([
+      for sg in var.security_groups : [
+        for r in concat(sg.ingress, sg.egress) :
+        length([for v in [r.cidr_ipv4, r.cidr_ipv6, r.source_security_group_key,
+                          r.source_security_group_id, r.self ? "self" : null] : v if v != null]) == 1
+      ]
+    ]))
+    error_message = "Every rule must set exactly one of cidr_ipv4, cidr_ipv6, source_security_group_key, source_security_group_id or self."
+  }
+}
+
+
+Field
+	Meaning
+	cidr_ipv4
+	Allow from an IP range
+	source_security_group_key
+	Allow from another group in this same map, by key
+	source_security_group_id
+	Allow from an existing group outside this module
+	self
+	Allow from members of this same group
+	protocol = "-1"
+	All protocols; ports are ignored
+	egress default
+	If you say nothing, outbound is wide open (typical for servers that must download packages)
+	
+
+The validation counts how many source fields are set on each rule and insists on exactly one. This catches tfvars typos before AWS sees them.
+main.tf – groups first
+resource "aws_security_group" "this" {
+  for_each    = var.security_groups
+  name_prefix = "${var.name}-${each.key}-"
+  description = each.value.description
+  vpc_id      = var.vpc_id
+  tags        = merge(var.tags, each.value.tags, { Name = "${var.name}-${each.key}-sg" })
+  lifecycle { create_before_destroy = true }
+}
+
+
+Line
+	Why
+	name_prefix instead of name
+	AWS appends a random suffix, so a replacement can be created before the old one is deleted
+	create_before_destroy = true
+	If the group must be replaced, the new one exists before the old is removed, so instances are never left with no firewall
+	No inline ingress/egress
+	Rules come next as separate resources
+	
+
+main.tf – flatten the rules
+locals {
+  ingress_rules = flatten([
+    for sg_key, sg in var.security_groups : [
+      for idx, rule in sg.ingress : {
+        id     = "${sg_key}-ingress-${idx}"
+        sg_key = sg_key
+        ...all rule fields...
+      }
+    ]
+  ])
+}
+
+
+Two nested fors produce a list of lists (one inner list per group). flatten turns that into one flat list. Each entry gets a unique id like keycloak-ingress-1 which becomes the for_each key.
+GOTCHA
+The key includes the list index, so reordering rules in tfvars changes keys and Terraform will delete and recreate the affected rules. Harmless for security groups (a few seconds), but be aware.
+	
+
+main.tf – the rule resources
+resource "aws_vpc_security_group_ingress_rule" "this" {
+  for_each          = { for r in local.ingress_rules : r.id => r }
+  security_group_id = aws_security_group.this[each.value.sg_key].id
+  description       = each.value.description
+  ip_protocol       = each.value.protocol
+  from_port         = each.value.protocol == "-1" ? null : each.value.from_port
+  to_port           = each.value.protocol == "-1" ? null : each.value.to_port
+  cidr_ipv4         = each.value.cidr_ipv4
+  cidr_ipv6         = each.value.cidr_ipv6
+  referenced_security_group_id = (
+    each.value.self ? aws_security_group.this[each.value.sg_key].id :
+    each.value.source_security_group_key != null ? aws_security_group.this[each.value.source_security_group_key].id :
+    each.value.source_security_group_id
+  )
+  tags = merge(var.tags, { Name = each.key })
+}
+
+
+Line
+	What
+	Why / How
+	{ for r in ... : r.id => r }
+	List → map keyed by id
+	for_each needs a map or set
+	aws_security_group.this[each.value.sg_key].id
+	Which group this rule belongs to
+	Looks up the group by key
+	ip_protocol / ports null when -1
+	All-traffic rules must not set ports
+	AWS rejects ports with protocol -1
+	Nested conditional for referenced_security_group_id
+	Resolve self / key / raw id
+	Only one is set (guaranteed by the validation)
+	aws_vpc_security_group_ingress_rule (new-style)
+	One resource per rule
+	Newer than inline rules; each rule gets its own ID and tags, and changes are surgical
+	
+
+The egress resource is identical with aws_vpc_security_group_egress_rule.
+Verify with the AWS CLI
+SG=$(terraform -chdir=stacks/10-network output -json security_group_ids | jq -r .keycloak)
+aws ec2 describe-security-groups --group-ids $SG --query 'SecurityGroups[0].IpPermissions'
+aws ec2 describe-security-group-rules --filters Name=group-id,Values=$SG --output table
+
+
+Look for a rule whose ReferencedGroupInfo.GroupId is the Kafka group — that is the SG-to-SG rule.
+OFFICIAL DOCS
+https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule · Security group rules reference: https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
+	
+
+Chapter Quiz
+Q1. Why are groups created without rules first?
+a) Speed
+b) To avoid a dependency cycle when rules reference other groups
+c) AWS requires it
+d) Rules are optional
+Q2. What does flatten do to a list of lists?
+a) Sorts it
+b) Removes duplicates
+c) Makes one flat list
+d) Reverses it
+Q3. What happens if a rule sets both cidr_ipv4 and source_security_group_key?
+a) Both apply
+b) The validation fails with a clear message
+c) The first wins
+d) AWS decides
+Q4. Why create_before_destroy on security groups?
+a) Cheaper
+b) So a replacement exists before the old one is removed and instances keep a firewall
+c) Required by for_each
+d) For tags
+Q5. With protocol -1, what must the ports be?
+a) 0
+b) 65535
+c) null / unset
+d) 22
+________________
+
+
+Chapter 16: The IAM Role and Elastic IP Modules
+IAM instance role — modules/iam_instance_role/
+data "aws_iam_policy_document" "assume" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+ 
+resource "aws_iam_role" "this" {
+  name_prefix        = "${var.name}-"
+  description        = var.description
+  assume_role_policy = data.aws_iam_policy_document.assume.json
+  tags               = merge(var.tags, { Name = "${var.name}-role" })
+}
+ 
+resource "aws_iam_role_policy_attachment" "managed" {
+  for_each   = toset(var.managed_policy_arns)
+  role       = aws_iam_role.this.name
+  policy_arn = each.value
+}
+ 
+resource "aws_iam_role_policy" "inline" {
+  for_each = var.inline_policies
+  name     = each.key
+  role     = aws_iam_role.this.id
+  policy   = each.value
+}
+ 
+resource "aws_iam_instance_profile" "this" {
+  name_prefix = "${var.name}-"
+  role        = aws_iam_role.this.name
+}
+
+
+Line
+	What
+	Why / How
+	data "aws_iam_policy_document"
+	Builds JSON for the trust policy
+	Safer than hand-writing JSON; Terraform validates the structure
+	principals { Service = ec2.amazonaws.com }
+	"EC2 may assume this role"
+	This is the trust policy — who may wear the badge
+	aws_iam_role
+	The badge itself
+	
+
+	for_each = toset(var.managed_policy_arns)
+	Attach each managed policy
+	toset because for_each over a list needs a set
+	AmazonSSMManagedInstanceCore (default)
+	Permissions the SSM agent needs
+	Enables Session Manager without SSH
+	aws_iam_role_policy inline
+	Optional custom policies
+	Map of name → JSON
+	aws_iam_instance_profile
+	Holder for the role
+	EC2 attaches profiles, not roles
+	
+
+NOTE
+Two policies are involved in every role. The trust policy says who can assume the role (EC2). The permission policies say what the role can do (talk to SSM). Beginners often confuse them.
+	
+
+REAL-WORLD ANALOGY
+The trust policy is the sign on the key cabinet: "Substitute teachers may take a key." The permission policy is what the key opens.
+	
+
+Outputs: role_name, role_arn, instance_profile_name, instance_profile_arn, policy_attachment_ids.
+Elastic IP — modules/elastic_ip/
+resource "aws_eip" "this" {
+  domain = "vpc"
+  tags   = merge(var.tags, { Name = "${var.name}-eip" })
+}
+output "allocation_id" { value = aws_eip.this.id }
+output "public_ip"     { value = aws_eip.this.public_ip }
+
+
+Tiny on purpose. domain = "vpc" is required on modern accounts. The EIP is created without an instance so its public_ip is known before we render user data. The association to an instance happens later in the ec2_instance module.
+GOTCHA
+An allocated but unattached EIP costs a small hourly fee. Always run destroy on labs you are done with.
+	
+
+Verify with the AWS CLI
+aws iam get-role --role-name $(aws iam list-roles --query 'Roles[?contains(RoleName,`ec2_ssm`)].RoleName' --output text)
+aws iam list-attached-role-policies --role-name <role-name>
+aws iam list-instance-profiles --query 'InstanceProfiles[?contains(InstanceProfileName,`kafka`)]'
+aws ec2 describe-addresses --query 'Addresses[].{IP:PublicIp,Instance:InstanceId,Name:Tags[?Key==`Name`].Value|[0]}' --output table
+
+
+OFFICIAL DOCS
+IAM roles for EC2: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html · Elastic IPs: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html
+	
+
+Chapter Quiz
+Q1. What is a trust policy?
+a) What the role can do
+b) Who may assume the role
+c) A tag
+d) A password
+Q2. Why use data "aws_iam_policy_document" instead of a JSON string?
+a) It is shorter
+b) Terraform validates structure and it composes well
+c) AWS requires it
+d) It is faster
+Q3. Why is toset() used with for_each on managed_policy_arns?
+a) To sort
+b) for_each requires a map or set, not a list
+c) To remove nulls
+d) For tagging
+Q4. Why is the EIP created before the instance?
+a) EIPs are slow
+b) So the public IP can be embedded in user data
+c) It is cheaper
+d) The instance module cannot create EIPs
+Q5. What attaches a role to an EC2 instance?
+a) The role ARN directly
+b) An instance profile
+c) A security group
+d) A tag
+________________
+
+
+Chapter 17: The Launch Template and EC2 Instance Modules
+Launch template — modules/launch_template/
+This is the "classroom package" — a reusable recipe with secure defaults. Every argument is a variable with a sensible default.
+resource "aws_launch_template" "this" {
+  name_prefix            = "${var.name}-"
+  description            = var.description
+  image_id               = var.image_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  update_default_version = var.update_default_version
+  ebs_optimized          = var.ebs_optimized
+ 
+  dynamic "iam_instance_profile" {
+    for_each = var.iam_instance_profile_name == null ? [] : [1]
+    content { name = var.iam_instance_profile_name }
+  }
+ 
+  network_interfaces {
+    device_index                = 0
+    associate_public_ip_address = var.associate_public_ip_address
+    delete_on_termination       = true
+    subnet_id                   = var.subnet_id
+    security_groups             = var.security_group_ids
+  }
+ 
+  user_data = var.user_data == null ? null : base64encode(var.user_data)
+ 
+  block_device_mappings {
+    device_name = var.root_device_name
+    ebs {
+      volume_type           = var.root_volume_type
+      volume_size           = var.root_volume_size
+      iops                  = var.root_volume_iops
+      throughput            = var.root_volume_throughput
+      encrypted             = var.root_volume_encrypted
+      kms_key_id            = var.root_volume_kms_key_id
+      delete_on_termination = true
+    }
+  }
+ 
+  dynamic "block_device_mappings" {
+    for_each = var.additional_volumes
+    content {
+      device_name = block_device_mappings.value.device_name
+      ebs { ... }
+    }
+  }
+ 
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = var.require_imdsv2 ? "required" : "optional"
+    http_put_response_hop_limit = var.metadata_hop_limit
+    instance_metadata_tags      = var.enable_instance_metadata_tags ? "enabled" : "disabled"
+  }
+ 
+  monitoring { enabled = var.detailed_monitoring }
+ 
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(var.tags, var.instance_tags, { Name = "${var.name}-ec2" })
+  }
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(var.tags, var.volume_tags, { Name = "${var.name}-root" })
+  }
+  tags = merge(var.tags, { Name = "${var.name}-launch-template" })
+}
+
+
+Line
+	What
+	Why / How
+	name_prefix
+	Unique name with suffix
+	Lets Terraform create a new template before removing the old
+	image_id
+	The AMI
+	Passed in; the apps stack resolves it from SSM
+	update_default_version = true
+	New versions become the default
+	Anything launching from "default" gets the latest recipe
+	dynamic "iam_instance_profile"
+	Include the block only if a profile was given
+	dynamic builds a nested block from a list; empty list = no block
+	network_interfaces
+	Subnet, SG, public IP on the primary NIC
+	Put here rather than at instance level so the template is complete
+	user_data = base64encode(...)
+	Startup script
+	AWS requires base64; the module does it so callers pass plain text
+	block_device_mappings
+	Root disk
+	gp3 encrypted by default — security best practice at no extra cost
+	dynamic "block_device_mappings"
+	Extra disks
+	e.g. a data disk for Kafka logs
+	http_tokens = "required"
+	IMDSv2 only
+	Blocks a whole class of credential-theft attacks (SSRF)
+	http_put_response_hop_limit
+	How far metadata replies may travel
+	Default 1; set 2 if Docker containers must reach IMDS
+	monitoring
+	1-minute CloudWatch metrics
+	Off by default (costs a little)
+	tag_specifications × 2
+	Tags for instance and volume
+	Volumes are separate resources; without this they are untagged
+	
+
+GOTCHA
+user_data in a launch template is not re-run when you change it on an existing instance. A new template version is created, but the instance keeps running the old script until it is replaced. To roll out new user data, replace the instance (terraform taint / -replace).
+	
+
+NOTE
+The user_data variable is marked sensitive = true because our scripts embed passwords. Terraform hides it in plans.
+	
+
+EC2 instance — modules/ec2_instance/
+resource "aws_instance" "this" {
+  launch_template {
+    id      = var.launch_template_id
+    version = var.launch_template_version
+  }
+  disable_api_termination = var.termination_protection
+  tags = merge(var.tags, { Name = "${var.name}-ec2" })
+}
+ 
+resource "aws_eip_association" "this" {
+  count         = var.eip_allocation_id == null ? 0 : 1
+  instance_id   = aws_instance.this.id
+  allocation_id = var.eip_allocation_id
+}
+
+
+Line
+	What
+	Why / How
+	launch_template { id, version }
+	Build from the recipe
+	No AMI/type/subnet repeated here — the template owns them
+	version = tostring(latest_version)
+	Pin to the exact version
+	Changing the template bumps the version, which changes this argument, which replaces the instance — exactly what we want for a new user-data script
+	disable_api_termination
+	Guard against accidental delete
+	Off for labs, on for production
+	aws_eip_association with count
+	Optional EIP
+	Attaching happens after the instance exists
+	
+
+Outputs: id, arn, private_ip, public_ip (the EIP if attached), availability_zone.
+Verify with the AWS CLI
+aws ec2 describe-launch-templates --query 'LaunchTemplates[].{Name:LaunchTemplateName,Latest:LatestVersionNumber,Default:DefaultVersionNumber}' --output table
+aws ec2 describe-launch-template-versions --launch-template-name <name> --versions '$Latest' \
+  --query 'LaunchTemplateVersions[0].LaunchTemplateData.{Type:InstanceType,AMI:ImageId,IMDS:MetadataOptions.HttpTokens}'
+ID=$(terraform -chdir=stacks/20-apps output -raw keycloak_instance_id)
+aws ec2 describe-instances --instance-ids $ID --query 'Reservations[0].Instances[0].{State:State.Name,Private:PrivateIpAddress,Public:PublicIpAddress,Profile:IamInstanceProfile.Arn,IMDS:MetadataOptions.HttpTokens}'
+aws ec2 get-console-output --instance-id $ID --latest --output text | tail -50
+
+
+OFFICIAL DOCS
+Launch templates: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html · IMDSv2: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html · aws_launch_template: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
+	
+
+Chapter Quiz
+Q1. What does a dynamic block do?
+a) Makes the resource faster
+b) Generates zero or more nested blocks from a collection
+c) Encrypts data
+d) Creates a variable
+Q2. Why require IMDSv2?
+a) It is faster
+b) It blocks credential theft via SSRF-style attacks
+c) Terraform requires it
+d) It is free
+Q3. Changing user data on an existing instance's launch template will:
+a) Re-run the script immediately
+b) Create a new template version; the instance must be replaced to run it
+c) Do nothing
+d) Reboot the instance
+Q4. Why pin version = tostring(latest_version) on the instance?
+a) For speed
+b) So template changes flow through to replace the instance
+c) AWS requires it
+d) To avoid replacement
+Q5. Why two tag_specifications blocks?
+a) One is a typo
+b) Instances and volumes are tagged separately
+c) For the EIP
+d) For the subnet
+________________
+
+
+Chapter 18: The Network Stack (Process 1), Line by Line
+Folder: stacks/10-network/. This is the first thing you apply. It builds the foundation and publishes outputs for the apps stack.
+versions.tf and providers.tf
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.0" }
+  }
+  # backend "s3" { ... }   # uncomment for shared state
+}
+ 
+provider "aws" {
+  region = var.aws_region
+  default_tags {
+    tags = merge({ Project = var.project_name, Stack = "network", ManagedBy = "terraform" }, var.tags)
+  }
+}
+
+
+Line
+	Why
+	~> 6.0
+	Any 6.x, never 7.0 — protects you from breaking changes
+	backend "s3" commented
+	Local state for a lab; Chapter 22 shows how to turn it on
+	default_tags
+	Every resource gets Project/Stack/ManagedBy tags for free — cost reports and "who made this?" answers
+	
+
+variables.tf
+The interesting variables:
+variable "availability_zone"               { type = string, default = null }
+variable "instance_types_for_az_selection" { type = list(string), default = ["t3.medium", "t3.small"] }
+variable "vpc_cidr"        { type = string, default = "10.40.0.0/16" }
+variable "public_subnets"  { type = map(object({...})), default = { public-a = { cidr_block = "10.40.1.0/24" } } }
+variable "allowed_cidr"    { type = string, default = "0.0.0.0/0" }
+variable "security_groups" { type = map(object({...})) }
+variable "instance_roles"  { type = map(object({ managed_policy_arns = optional(list(string), [...SSM...]) })) }
+
+
+Everything a different environment might change is here. Nothing is hard-coded in main.tf.
+main.tf – choosing the Availability Zone
+data "aws_ec2_instance_type_offerings" "by_type" {
+  for_each      = var.availability_zone == null ? toset(var.instance_types_for_az_selection) : toset([])
+  location_type = "availability-zone"
+  filter {
+    name   = "instance-type"
+    values = [each.value]
+  }
+}
+ 
+locals {
+  az_sets    = [for k, d in data.aws_ec2_instance_type_offerings.by_type : toset(d.locations)]
+  common_azs = length(local.az_sets) == 0 ? [] : sort(tolist(setintersection(local.az_sets...)))
+  selected_availability_zone = coalesce(var.availability_zone, try(local.common_azs[0], null))
+}
+ 
+check "availability_zone_available" {
+  assert {
+    condition     = local.selected_availability_zone != null
+    error_message = "No AZ in ${var.aws_region} supports all of: ${join(", ", var.instance_types_for_az_selection)}."
+  }
+}
+
+
+Line
+	What
+	Why / How
+	data ... for_each = ...
+	Ask AWS which AZs offer each instance type
+	One query per type; skipped entirely if the user pinned an AZ
+	location_type = "availability-zone"
+	Answer in AZ names
+	Could also answer by region
+	az_sets
+	A list of sets, one per type
+	e.g. [{a,b,c}, {a,b,d}]
+	setintersection(local.az_sets...)
+	AZs in every set
+	The ... spreads a list into separate arguments
+	sort(tolist(...))
+	Deterministic order
+	Sets are unordered; sorting means the same AZ is chosen every run
+	coalesce(var.availability_zone, try(...))
+	Manual pin wins, else first common AZ
+	
+
+	check block
+	Friendly warning if nothing matches
+	
+
+	
+
+REAL-WORLD ANALOGY
+Before choosing which store to open the bakery in, you check which locations have both the ovens and the mixers you need. You pick the first one alphabetically so everyone lands on the same answer.
+	
+
+main.tf – the ALLOWED_CIDR trick
+locals {
+  security_groups = {
+    for k, sg in var.security_groups : k => merge(sg, {
+      ingress = [for r in sg.ingress : merge(r, { cidr_ipv4 = r.cidr_ipv4 == "ALLOWED_CIDR" ? var.allowed_cidr : r.cidr_ipv4 })]
+      egress  = [for r in sg.egress  : merge(r, { cidr_ipv4 = r.cidr_ipv4 == "ALLOWED_CIDR" ? var.allowed_cidr : r.cidr_ipv4 })]
+    })
+  }
+}
+
+
+In tfvars you write cidr_ipv4 = "ALLOWED_CIDR" on three rules. This local swaps the placeholder for the real value of var.allowed_cidr. Change your IP once, and every rule updates.
+main.tf – calling the modules
+module "vpc" {
+  source                    = "../../modules/vpc"
+  name                      = var.project_name
+  cidr_block                = var.vpc_cidr
+  default_availability_zone = local.selected_availability_zone
+  public_subnets            = var.public_subnets
+  private_subnets           = var.private_subnets
+  create_nat_gateway        = var.create_nat_gateway
+  tags                      = var.tags
+}
+ 
+module "security_groups" {
+  source          = "../../modules/security_groups"
+  name            = var.project_name
+  vpc_id          = module.vpc.vpc_id
+  security_groups = local.security_groups
+  tags            = var.tags
+}
+ 
+module "instance_roles" {
+  source              = "../../modules/iam_instance_role"
+  for_each            = var.instance_roles
+  name                = "${var.project_name}-${each.key}"
+  description         = each.value.description
+  managed_policy_arns = each.value.managed_policy_arns
+  inline_policies     = each.value.inline_policies
+  tags                = var.tags
+}
+
+
+Notice how thin this is. The root module only wires variables to modules. vpc_id = module.vpc.vpc_id creates the dependency: security groups wait for the VPC.
+outputs.tf
+output "vpc_id"                 { value = module.vpc.vpc_id }
+output "public_subnet_ids"      { value = module.vpc.public_subnet_ids }
+output "security_group_ids"     { value = module.security_groups.security_group_ids }
+output "instance_profile_names" { value = { for k, m in module.instance_roles : k => m.instance_profile_name } }
+output "selected_availability_zone" { value = local.selected_availability_zone }
+
+
+These are the contract with the apps stack. Add outputs freely; never rename them without updating consumers.
+dev.tfvars – the order form
+aws_region   = "us-east-1"
+project_name = "kafka-keycloak-lab"
+tags         = { Environment = "dev" }
+ 
+availability_zone               = null
+instance_types_for_az_selection = ["t3.medium", "t3.small"]
+ 
+vpc_cidr = "10.40.0.0/16"
+public_subnets = {
+  public-a = { cidr_block = "10.40.1.0/24" }
+}
+ 
+allowed_cidr = "0.0.0.0/0"     # change to YOUR_IP/32
+ 
+security_groups = {
+  kafka = {
+    description = "Kafka and Kafka UI EC2 access"
+    ingress = [
+      { description = "Kafka UI", from_port = 8080, to_port = 8080, cidr_ipv4 = "ALLOWED_CIDR" }
+    ]
+  }
+  keycloak = {
+    description = "Keycloak EC2 access"
+    ingress = [
+      { description = "Keycloak HTTPS", from_port = 8443, to_port = 8443, cidr_ipv4 = "ALLOWED_CIDR" },
+      { description = "Kafka UI back-channel", from_port = 8443, to_port = 8443, source_security_group_key = "kafka" },
+      { description = "Health and metrics", from_port = 9000, to_port = 9000, cidr_ipv4 = "ALLOWED_CIDR" }
+    ]
+  }
+}
+ 
+instance_roles = {
+  ec2_ssm = { managed_policy_arns = ["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"] }
+}
+
+
+BEST PRACTICE
+Set allowed_cidr to your own IP with /32. Find it with curl -s https://checkip.amazonaws.com. Leaving 0.0.0.0/0 exposes the login and dashboard pages to the whole internet.
+	
+
+Step-by-step: apply the network stack
+cd kafka-keycloak-terraform
+terraform -chdir=stacks/10-network init
+terraform -chdir=stacks/10-network plan -var-file=dev.tfvars
+terraform -chdir=stacks/10-network apply -var-file=dev.tfvars
+terraform -chdir=stacks/10-network output
+
+
+Expected plan size: about 16 resources (VPC, IGW, subnet, route table, route, association, 2 SGs, 6 rules, role, attachment, profile).
+Verify with the AWS CLI
+cd stacks/10-network
+VPC=$(terraform output -raw vpc_id)
+SUB=$(terraform output -json public_subnet_ids | jq -r '."public-a"')
+aws ec2 describe-vpcs --vpc-ids $VPC --query 'Vpcs[0].{Cidr:CidrBlock,DnsHost:EnableDnsHostnames}' 
+aws ec2 describe-subnets --subnet-ids $SUB --query 'Subnets[0].{AZ:AvailabilityZone,Cidr:CidrBlock,Public:MapPublicIpOnLaunch}'
+aws ec2 describe-route-tables --filters Name=association.subnet-id,Values=$SUB --query 'RouteTables[0].Routes'
+aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values=t3.medium --query 'InstanceTypeOfferings[].Location'
+terraform state list
+
+
+Chapter Quiz
+Q1. Why sort the common AZ list?
+a) AWS requires it
+b) Sets are unordered; sorting makes the choice deterministic
+c) For speed
+d) To pick the cheapest
+Q2. What does the ... in setintersection(local.az_sets...) do?
+a) Comments out the rest
+b) Spreads the list into separate arguments
+c) Repeats the call
+d) Nothing
+Q3. What replaces "ALLOWED_CIDR" in tfvars?
+a) Nothing; it's literal
+b) The value of var.allowed_cidr, via a local
+c) Your AWS account ID
+d) The VPC CIDR
+Q4. What do default_tags in the provider do?
+a) Tag only the VPC
+b) Apply tags to every resource the provider creates
+c) Replace Name tags
+d) Nothing without a variable
+Q5. The outputs of the network stack are best described as:
+a) Debug info
+b) The contract the apps stack depends on
+c) Temporary
+d) Sensitive
+________________
+
+
+Chapter 19: The Apps Stack (Process 2), Line by Line
+Folder: stacks/20-apps/. This stack builds two servers on top of the network. It is the most detailed chapter, because this is where Terraform, shell scripts, Docker and the applications meet.
+variables.tf – the important ones
+variable "network_state" {
+  type = object({ backend = string, config = map(string) })
+  default = { backend = "local", config = { path = "../10-network/terraform.tfstate" } }
+}
+ 
+variable "network" {
+  type = object({
+    subnet_key                  = optional(string, "public-a")
+    keycloak_security_group_key = optional(string, "keycloak")
+    kafka_security_group_key    = optional(string, "kafka")
+    instance_profile_key        = optional(string, "ec2_ssm")
+    vpc_id                      = optional(string)
+    subnet_id                   = optional(string)
+    keycloak_security_group_ids = optional(list(string))
+    kafka_security_group_ids    = optional(list(string))
+    instance_profile_name       = optional(string)
+  })
+  default = {}
+}
+ 
+variable "ami_id"            { type = string, default = null }
+variable "ami_ssm_parameter" { type = string, default = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64" }
+ 
+variable "keycloak" { type = object({ enabled, instance_type, root_volume_size, root_volume_type, key_name, admin_username, admin_password, tags }) }
+variable "kafka"    { type = object({ enabled, instance_type, root_volume_size, root_volume_type, key_name, ui_username, ui_password, tags }) }
+
+
+Variable
+	Why
+	network_state
+	Where the network stack's state lives — local file by default, S3 for teams
+	network.*_key
+	Which subnet/SG/profile to use, by name — no IDs in tfvars
+	network.*_id / _ids / _name
+	Escape hatch: pass raw IDs and skip remote state (deploy into any existing VPC)
+	ami_id / ami_ssm_parameter
+	Pin an AMI, or always take the latest Amazon Linux 2023
+	keycloak, kafka objects
+	One variable per server holding everything about it
+	
+
+data.tf – reading the network and the AMI
+data "terraform_remote_state" "network" {
+  count   = local.needs_remote_state ? 1 : 0
+  backend = var.network_state.backend
+  config  = var.network_state.config
+}
+ 
+data "aws_ssm_parameter" "ami" {
+  count = var.ami_id == null ? 1 : 0
+  name  = var.ami_ssm_parameter
+}
+
+
+Line
+	What
+	Why / How
+	terraform_remote_state
+	Read another stack's outputs
+	Only its outputs are visible — not its resources
+	count = needs_remote_state ? 1 : 0
+	Skip the read if every ID was overridden
+	Lets the stack run without the network stack
+	aws_ssm_parameter
+	Public parameter with the newest AL2023 AMI ID
+	AWS updates it; you get patched images automatically
+	
+
+GOTCHA
+Because the AMI parameter changes over time, a plan months later will show the launch template changing and the instance being replaced. For production, pin ami_id and update deliberately.
+	
+
+locals.tf – resolving inputs
+locals {
+  needs_remote_state = anytrue([
+    var.network.subnet_id == null,
+    var.network.keycloak_security_group_ids == null,
+    var.network.kafka_security_group_ids == null,
+    var.network.instance_profile_name == null,
+  ])
+ 
+  net = try(data.terraform_remote_state.network[0].outputs, {})
+ 
+  subnet_id = var.network.subnet_id != null ? var.network.subnet_id : try(local.net.public_subnet_ids[var.network.subnet_key], null)
+  keycloak_security_group_ids = var.network.keycloak_security_group_ids != null ? var.network.keycloak_security_group_ids : try([local.net.security_group_ids[var.network.keycloak_security_group_key]], null)
+  kafka_security_group_ids    = ...same pattern...
+  instance_profile_name       = ...same pattern...
+ 
+  ami_id = var.ami_id != null ? var.ami_id : try(data.aws_ssm_parameter.ami[0].value, null)
+ 
+  keycloak_admin_password = var.keycloak.admin_password != null ? var.keycloak.admin_password : try(random_password.keycloak_admin[0].result, null)
+  kafka_ui_password       = var.kafka.ui_password != null ? var.kafka.ui_password : try(random_password.kafka_ui_user[0].result, null)
+  kafka_ui_client_secret  = random_password.kafka_ui_client_secret.result
+}
+
+
+Every local follows the same shape: "if the user gave me a value, use it; otherwise look it up." This pattern — explicit override, then discovery — is what makes the stack reusable.
+main.tf – secrets
+resource "random_password" "keycloak_admin" {
+  count   = var.keycloak.admin_password == null ? 1 : 0
+  length  = 24
+  special = false
+}
+resource "random_password" "kafka_ui_user"          { count = var.kafka.ui_password == null ? 1 : 0, length = 20, special = false }
+resource "random_password" "kafka_ui_client_secret" { length = 32, special = false }
+
+
+Line
+	Why
+	random_password
+	Generates a password once and stores it in state; it does not change on later applies
+	count = ... == null
+	Only generate when the user did not supply one
+	special = false
+	Avoids characters that break shell scripts or YAML
+	kafka_ui_client_secret
+	The OIDC "client secret" shared between Kafka UI and Keycloak — always generated
+	
+
+NOTE
+These values are in the state file. That is one more reason to protect state (Chapter 22 uses S3 with encryption).
+	
+
+main.tf – Elastic IPs first
+module "keycloak_eip" {
+  source = "../../modules/elastic_ip"
+  count  = var.keycloak.enabled ? 1 : 0
+  name   = "${var.project_name}-keycloak"
+}
+module "kafka_eip" { ...same for kafka... }
+
+
+Allocated before anything else so the addresses can be baked into configuration files.
+main.tf – rendering Keycloak's configuration
+locals {
+  keycloak_public_ip = try(module.keycloak_eip[0].public_ip, null)
+  kafka_public_ip    = try(module.kafka_eip[0].public_ip, "kafka-ui.invalid")
+ 
+  keycloak_realm = templatefile("${path.module}/files/keycloak-realm.json.tftpl", {
+    kafka_public_ip   = local.kafka_public_ip
+    kafka_ui_username = var.kafka.ui_username
+    kafka_ui_password = local.kafka_ui_password
+    kafka_ui_secret   = local.kafka_ui_client_secret
+  })
+ 
+  keycloak_compose = templatefile("${path.module}/files/keycloak-compose.yml.tftpl", {
+    keycloak_public_ip      = local.keycloak_public_ip
+    keycloak_admin_username = var.keycloak.admin_username
+    keycloak_admin_password = local.keycloak_admin_password
+  })
+ 
+  keycloak_user_data = templatefile("${path.module}/templates/keycloak_user_data.sh.tftpl", {
+    keycloak_compose_b64 = base64encode(local.keycloak_compose)
+    keycloak_realm_b64   = base64encode(local.keycloak_realm)
+    keycloak_public_ip   = local.keycloak_public_ip
+  })
+}
+
+
+Three layers of templates, like nesting boxes:
+1. Realm JSON – Keycloak's definition of the kafka-ui client (with the secret and the redirect URL http://<kafka-ip>:8080/login/oauth2/code/keycloak) and the demo user.
+2. docker-compose.yml – how to run the Keycloak container: admin username/password, KC_HOSTNAME=https://<keycloak-ip>:8443, HTTPS certificate paths, health and metrics on 9000.
+3. user data script – installs Docker, generates a self-signed TLS certificate whose SANs include the public IP, the private IP and 127.0.0.1, writes the two files above (decoded from base64), creates a systemd service, and waits until Keycloak answers.
+Why base64?
+	Compose YAML and realm JSON contain quotes, newlines and $ signs. Base64 turns them into one safe string that the shell script decodes with base64 -d.
+	
+
+REAL-WORLD ANALOGY
+The realm is the school roster and door list; the compose file is the daily schedule; user data is the instructions to the janitor for opening day: "unlock the building, post the schedule, hang the roster."
+	
+
+The Keycloak user-data script explained
+Key parts of templates/keycloak_user_data.sh.tftpl:
+#!/bin/bash
+set -euxo pipefail                    # stop on any error, print each command
+exec > >(tee -a /var/log/keycloak-bootstrap.log | logger -t user-data -s 2>/dev/console) 2>&1
+ 
+dnf install -y docker openssl         # Amazon Linux 2023 package manager
+systemctl enable --now docker
+# download the docker compose plugin (pinned version)
+ 
+IMDS_TOKEN=$(curl -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' http://169.254.169.254/latest/api/token)
+PRIVATE_IP=$(curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+PUBLIC_IP="${keycloak_public_ip}"    # <- filled in by Terraform
+ 
+# openssl.cnf with subjectAltName = IP.1=$PUBLIC_IP, IP.2=$PRIVATE_IP, IP.3=127.0.0.1
+openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -keyout keycloak.key -out keycloak.crt -config openssl.cnf
+ 
+echo '${keycloak_compose_b64}' | base64 -d > docker-compose.yml
+echo '${keycloak_realm_b64}'   | base64 -d > keycloak-realm.json
+chown 1000:0 keycloak-realm.json      # the Keycloak container runs as UID 1000
+ 
+# systemd unit keycloak-compose.service -> docker compose up -d
+systemctl enable --now keycloak-compose.service
+ 
+for i in {1..60}; do curl --cacert keycloak.crt -fsS https://127.0.0.1:8443/realms/kafka-ui/.well-known/openid-configuration && break; sleep 2; done
+
+
+Step
+	Why
+	set -euxo pipefail
+	Fail fast and log every command — you can read the log later via SSM
+	exec > >(tee ...)
+	Send all output to a log file and the console (visible with get-console-output)
+	IMDSv2 token dance
+	Because we set http_tokens = required, the script must fetch a token before reading metadata
+	Self-signed cert with three SANs
+	Browsers reach the public IP, Kafka UI reaches the private IP, health checks use localhost — all must be in the certificate or TLS fails
+	chown 1000:0
+	The container's user must be able to read the files; a classic Docker permissions gotcha
+	systemd service
+	Survives reboots; docker compose up -d runs again automatically
+	Readiness loop
+	User data reports success only after Keycloak actually answers
+	
+
+main.tf – the Keycloak server
+module "keycloak_launch_template" {
+  source                    = "../../modules/launch_template"
+  count                     = var.keycloak.enabled ? 1 : 0
+  name                      = "${var.project_name}-keycloak"
+  image_id                  = local.ami_id
+  instance_type             = var.keycloak.instance_type
+  key_name                  = var.keycloak.key_name
+  iam_instance_profile_name = local.instance_profile_name
+  subnet_id                 = local.subnet_id
+  security_group_ids        = local.keycloak_security_group_ids
+  user_data                 = local.keycloak_user_data
+  root_volume_size          = var.keycloak.root_volume_size
+  root_volume_type          = var.keycloak.root_volume_type
+  tags                      = merge(var.tags, var.keycloak.tags)
+}
+ 
+module "keycloak" {
+  source                  = "../../modules/ec2_instance"
+  count                   = var.keycloak.enabled ? 1 : 0
+  name                    = "${var.project_name}-keycloak"
+  launch_template_id      = module.keycloak_launch_template[0].id
+  launch_template_version = tostring(module.keycloak_launch_template[0].latest_version)
+  eip_allocation_id       = module.keycloak_eip[0].allocation_id
+  tags                    = merge(var.tags, var.keycloak.tags)
+}
+
+
+Every input comes from a var. or a local. — the file is pure wiring.
+main.tf – Kafka's configuration depends on Keycloak
+locals {
+  keycloak_private_ip = try(module.keycloak[0].private_ip, null)
+ 
+  kafka_ui_config = templatefile("${path.module}/files/kafka-ui.yml.tftpl", {
+    kafka_public_ip     = local.kafka_public_ip
+    keycloak_public_ip  = local.keycloak_public_ip
+    keycloak_private_ip = local.keycloak_private_ip
+    kafka_ui_secret     = local.kafka_ui_client_secret
+  })
+  kafka_compose   = templatefile("${path.module}/files/docker-compose.yml.tftpl", {})
+  kafka_user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
+    docker_compose_b64  = base64encode(local.kafka_compose)
+    kafka_ui_config_b64 = base64encode(local.kafka_ui_config)
+    keycloak_private_ip = local.keycloak_private_ip
+  })
+}
+
+
+keycloak_private_ip is only known after the Keycloak instance exists. Because the Kafka user data references it, Terraform automatically builds Keycloak first. This is an implicit dependency doing real work.
+The kafka-ui.yml template is worth reading:
+auth:
+  type: OAUTH2
+  oauth2:
+    client:
+      keycloak:
+        clientId: kafka-ui
+        clientSecret: "${kafka_ui_secret}"
+        redirect-uri: "http://${kafka_public_ip}:8080/login/oauth2/code/keycloak"
+        authorization-uri: "https://${keycloak_public_ip}:8443/realms/kafka-ui/protocol/openid-connect/auth"
+        token-uri:     "https://${keycloak_private_ip}:8443/realms/kafka-ui/protocol/openid-connect/token"
+        jwk-set-uri:   "https://${keycloak_private_ip}:8443/realms/kafka-ui/protocol/openid-connect/certs"
+        user-info-uri: "https://${keycloak_private_ip}:8443/realms/kafka-ui/protocol/openid-connect/userinfo"
+
+
+URL
+	Who calls it
+	Address used
+	authorization-uri
+	Your browser (redirected by Kafka UI)
+	Keycloak public IP
+	token-uri, jwk-set-uri, user-info-uri
+	The Kafka UI server
+	Keycloak private IP, inside the VPC
+	
+
+This split is why the Keycloak security group has two rules on 8443: one for your IP (browser), one for the Kafka SG (server-to-server).
+The Kafka user-data script explained
+templates/user_data.sh.tftpl does the same Docker setup, then:
+KEYCLOAK_PRIVATE_IP="${keycloak_private_ip}"
+for i in {1..90}; do
+  openssl s_client -connect "$KEYCLOAK_PRIVATE_IP:8443" -showcerts </dev/null | openssl x509 -outform PEM > keycloak.crt && test -s keycloak.crt && break
+  sleep 2
+done
+docker run --rm --entrypoint keytool ghcr.io/kafbat/kafka-ui:v1.5.0 -importcert -noprompt -alias keycloak -file /work/keycloak.crt -keystore /work/keycloak-truststore.p12 -storetype PKCS12 -storepass changeit
+curl --cacert keycloak.crt -fsS https://$KEYCLOAK_PRIVATE_IP:8443/realms/kafka-ui/.well-known/openid-configuration
+systemctl enable --now kafka-compose.service
+
+
+Step
+	Why
+	Loop fetching Keycloak's certificate
+	Keycloak may still be starting; retry up to 3 minutes
+	keytool -importcert into a PKCS12 truststore
+	Kafka UI is a Java app; Java only trusts certificates in its truststore. We use the same image's keytool so the format is exactly right
+	curl --cacert check
+	Prove TLS works before starting Kafka UI, so failures are obvious in the log
+	
+
+The docker-compose.yml for Kafka runs apache/kafka:4.3.1 in KRaft mode (single node acting as both broker and controller) and kafbat/kafka-ui:v1.5.0 with JAVA_OPTS pointing at the truststore.
+main.tf – the Kafka server and the explicit dependency
+module "kafka" {
+  source                  = "../../modules/ec2_instance"
+  count                   = var.kafka.enabled ? 1 : 0
+  launch_template_id      = module.kafka_launch_template[0].id
+  launch_template_version = tostring(module.kafka_launch_template[0].latest_version)
+  eip_allocation_id       = module.kafka_eip[0].allocation_id
+  depends_on              = [module.keycloak]
+}
+ 
+check "kafka_requires_keycloak" {
+  assert {
+    condition     = !var.kafka.enabled || var.keycloak.enabled
+    error_message = "Kafka UI authenticates against Keycloak; enable keycloak when kafka is enabled."
+  }
+}
+
+
+The launch template already depends on Keycloak's private IP, so why depends_on? Because Terraform only guarantees Keycloak exists before the template is created — it might still be booting. depends_on = [module.keycloak] also waits for the EIP association inside that module, giving Keycloak's user data a head start before Kafka's script begins polling.
+outputs.tf
+output "kafka_ui_url"           { value = try("http://${module.kafka_eip[0].public_ip}:8080", null) }
+output "keycloak_admin_url"     { value = local.keycloak_public_ip == null ? null : "https://${local.keycloak_public_ip}:8443/admin/" }
+output "keycloak_admin_password" { value = local.keycloak_admin_password, sensitive = true }
+output "kafka_ui_user_password"  { value = local.kafka_ui_password,       sensitive = true }
+output "ssm_keycloak" { value = try("aws ssm start-session --region ${var.aws_region} --target ${module.keycloak[0].id}", null) }
+output "network_inputs_resolved" { value = { subnet_id = local.subnet_id, ... } }
+
+
+network_inputs_resolved is a debugging aid: it shows exactly which subnet, SGs, profile and AMI the stack decided to use.
+dev.tfvars
+network_state = { backend = "local", config = { path = "../10-network/terraform.tfstate" } }
+network = {
+  subnet_key = "public-a", keycloak_security_group_key = "keycloak",
+  kafka_security_group_key = "kafka", instance_profile_key = "ec2_ssm"
+}
+ami_id = null
+keycloak = { enabled = true, instance_type = "t3.small",  root_volume_size = 20, admin_username = "admin" }
+kafka    = { enabled = true, instance_type = "t3.medium", root_volume_size = 30, ui_username = "kafkauser" }
+
+
+Chapter Quiz
+Q1. What can terraform_remote_state read from another stack?
+a) All resources
+b) Only its outputs
+c) Its variables
+d) Its tfvars
+Q2. Why is Keycloak built before Kafka even without depends_on?
+a) Alphabetical order
+b) Kafka's user data references Keycloak's private IP
+c) Keycloak is smaller
+d) It isn't
+Q3. Why does Kafka UI use the private IP for token-uri but the public IP for authorization-uri?
+a) A typo
+b) The browser needs a public address; the server-to-server call stays inside the VPC
+c) Private is faster
+d) Keycloak requires it
+Q4. Why base64-encode compose files into user data?
+a) Encryption
+b) To safely carry quotes, newlines and $ through a shell script
+c) AWS limits
+d) Docker requires it
+Q5. Where does a generated random_password live?
+a) In a tag
+b) In the state file
+c) On the instance only
+d) In tfvars
+________________
+
+
+Chapter 20: Deploy, Test and Tear Down — Step by Step
+Before you start
+1. aws sts get-caller-identity works.
+2. Terraform ≥ 1.6 installed.
+3. curl -s https://checkip.amazonaws.com → put this in stacks/10-network/dev.tfvars as allowed_cidr = "X.X.X.X/32".
+4. jq installed (optional, for parsing JSON outputs).
+Step 1 – Network
+make network ENV=dev
+# or
+terraform -chdir=stacks/10-network init
+terraform -chdir=stacks/10-network apply -var-file=dev.tfvars
+
+
+Read the plan. You should see only + (create) lines. Type yes. Takes about 30 seconds.
+Step 2 – Apps
+make apps ENV=dev
+
+
+Expect: 3 random passwords, 2 EIPs, 2 launch templates, 2 instances, 2 EIP associations. Terraform finishes in ~2 minutes, but the servers keep working for another 3–6 minutes running user data.
+Step 3 – Watch the boot
+cd stacks/20-apps
+terraform output
+KC=$(terraform output -raw keycloak_instance_id)
+KF=$(terraform output -raw kafka_instance_id)
+ 
+# Console output (may lag a few minutes)
+aws ec2 get-console-output --instance-id $KC --latest --output text | tail -30
+ 
+# Or open a shell and read the bootstrap log
+aws ssm start-session --target $KC
+  sudo tail -f /var/log/keycloak-bootstrap.log
+  sudo docker ps
+  exit
+
+
+TIP
+If start-session says the target is not connected, wait a minute — the SSM agent registers after boot — and confirm with aws ssm describe-instance-information.
+	
+
+Step 4 – Test Keycloak
+1. Open terraform output -raw keycloak_admin_url in a browser.
+2. Accept the self-signed certificate warning (expected in a lab).
+3. Log in with admin and terraform output -raw keycloak_admin_password.
+4. Switch realm to kafka-ui; confirm the client kafka-ui and user kafkauser exist.
+KC_IP=$(terraform output -raw keycloak_public_ip)
+curl -k https://$KC_IP:9000/health/ready
+curl -k https://$KC_IP:8443/realms/kafka-ui/.well-known/openid-configuration | jq .issuer
+
+
+Step 5 – Test Kafka UI login
+1. Open terraform output -raw kafka_ui_url.
+2. You are redirected to Keycloak. Log in as kafkauser with terraform output -raw kafka_ui_user_password.
+3. You land in Kafka UI showing cluster local-kafka. Create a topic and send a message to prove Kafka works.
+Step 6 – Verify everything with the CLI
+aws ec2 describe-instances --filters Name=tag:Project,Values=kafka-keycloak-lab \
+  --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`].Value|[0],State:State.Name,Type:InstanceType,Public:PublicIpAddress,Private:PrivateIpAddress}' --output table
+aws ec2 describe-addresses --output table
+aws ssm describe-instance-information --query 'InstanceInformationList[].{Id:InstanceId,Ping:PingStatus,Agent:AgentVersion}'
+aws ec2 describe-instance-status --include-all-instances --query 'InstanceStatuses[].{Id:InstanceId,Sys:SystemStatus.Status,Inst:InstanceStatus.Status}'
+
+
+Step 7 – Make a change and re-apply
+Change kafka.instance_type to t3.large in dev.tfvars, then terraform plan -var-file=dev.tfvars. Notice: the launch template updates in place (new version), and the instance shows -/+ (replace) because the version changed. That is Terraform being honest about what a resize requires.
+Step 8 – Tear down
+make destroy ENV=dev
+# = apps destroy, then network destroy
+
+
+Order matters: instances must go before the subnet and security groups they use. Terraform handles the order inside a stack, but across stacks you run them in reverse.
+GOTCHA
+If you destroy the network stack first, Terraform will fail with "DependencyViolation" because instances still use the subnet. Always apps first.
+	
+
+Troubleshooting table
+Symptom
+	Likely cause
+	Check
+	Kafka UI shows TLS error to Keycloak
+	Kafka booted before Keycloak was ready
+	/var/log/kafka-bootstrap.log on Kafka host; re-run systemctl restart kafka-compose after Keycloak is up
+	Browser cannot reach 8080/8443
+	allowed_cidr is not your IP
+	curl checkip.amazonaws.com, update tfvars, apply network stack
+	SSM session fails
+	Agent not registered / no internet route
+	describe-instance-information; confirm subnet is public
+	"No AZ supports both instance types"
+	Region lacks those types together
+	Set availability_zone or change types
+	Plan wants to replace instances unexpectedly
+	AMI SSM parameter updated
+	Pin ami_id
+	DependencyViolation on destroy
+	Wrong stack order
+	Destroy apps first
+	
+
+Chapter Quiz
+Q1. In what order do you destroy the stacks?
+a) Network then apps
+b) Apps then network
+c) Either
+d) Both at once
+Q2. How do you get a shell on an instance in this project?
+a) SSH with a key on port 22
+b) aws ssm start-session
+c) The AWS console only
+d) telnet
+Q3. Where is the Keycloak bootstrap log?
+a) /var/log/messages
+b) /var/log/keycloak-bootstrap.log
+c) /opt/keycloak/log
+d) CloudWatch by default
+Q4. Changing an instance type in tfvars causes:
+a) In-place resize
+b) A new launch template version and instance replacement
+c) Nothing
+d) An error
+Q5. Which command proves Keycloak is ready?
+a) curl the health/ready endpoint on 9000
+b) ping
+c) terraform apply
+d) docker version
+________________
+
+
+Chapter 21: Best Practices, Tips and Gotchas
+This chapter gathers the professional habits that separate a lab from a system you can trust. Each item says what to do, why, and where it shows up in the project.
+Code organisation
+BEST PRACTICE
+One resource per concern, one module per building block, one stack per blast radius. Our split (modules → network stack → apps stack) means a mistake in the apps stack cannot delete the VPC.
+	
+
+BEST PRACTICE
+Standard file names. main.tf, variables.tf, outputs.tf, versions.tf, providers.tf, locals.tf, data.tf. Newcomers know where to look.
+	
+
+BEST PRACTICE
+No values in modules. Every module input is a variable. Values live in tfvars. If you find yourself typing "10.40.0.0/16" inside a module, stop.
+	
+
+BEST PRACTICE
+Run `terraform fmt` before every commit and terraform validate in CI. Formatting fights are wasted review time.
+	
+
+Naming and tagging
+BEST PRACTICE
+Use name_prefix for resources that may need replacing (SGs, launch templates, roles) so create-before-destroy works.
+	
+
+BEST PRACTICE
+Use default_tags on the provider for Project / Environment / Owner / ManagedBy. Tag volumes via launch template tag_specifications — they are easy to forget and show up as mystery costs.
+	
+
+Variables and tfvars
+TIP
+Prefer object({ ... optional(...) }) variables for "one thing with many settings" (like our keycloak object) and plain variables for cross-cutting values (aws_region).
+	
+
+TIP
+Give every variable a description. Add validation blocks for formats (CIDRs, instance types) so mistakes fail in seconds, not after AWS rejects them.
+	
+
+GOTCHA
+terraform.tfvars is auto-loaded; dev.tfvars is not. Always pass -var-file= explicitly or you will apply defaults by accident.
+	
+
+State
+BEST PRACTICE
+Remote state (S3 + native locking or DynamoDB) for anything with more than one person or one machine. Enable versioning on the bucket so you can recover.
+	
+
+GOTCHA
+Never run two applies at once against the same state. Locking exists to stop this; do not disable it.
+	
+
+TIP
+terraform state list, terraform state show, terraform state mv and terraform import are your tools for fixing state. Back it up before using mv.
+	
+
+Security
+BEST PRACTICE
+http_tokens = "required" (IMDSv2), encrypted volumes, no SSH ports, SSM Session Manager — all already in the project.
+	
+
+BEST PRACTICE
+Least-privilege IAM. The lab role has only AmazonSSMManagedInstanceCore. Add permissions per need, never AdministratorAccess on instances.
+	
+
+BEST PRACTICE
+allowed_cidr = YOUR_IP/32. Never leave admin consoles on 0.0.0.0/0.
+	
+
+BEST PRACTICE
+Mark secrets sensitive = true; keep them out of tfvars in Git. Prefer AWS Secrets Manager or SSM SecureString for real systems (Chapter 22).
+	
+
+Plans and applies
+BEST PRACTICE
+Read every plan. Search for "forces replacement" and "destroy". Save plans in CI (terraform plan -out=tfplan) and apply exactly that file.
+	
+
+TIP
+terraform plan -target=module.vpc limits a plan to one thing while debugging. Do not use -target for normal applies; it leaves state incomplete.
+	
+
+GOTCHA
+Data sources refresh every plan. A data source that returns a different value (latest AMI) causes drift. Pin values in production.
+	
+
+Modules and versions
+BEST PRACTICE
+Pin provider versions with ~>. Commit .terraform.lock.hcl. Pin remote module versions.
+	
+
+GOTCHA
+Upgrading a major provider version (5 → 6) can rename attributes. Read the upgrade guide, run plan in a sandbox first.
+	
+
+User data and boot scripts
+TIP
+set -euxo pipefail and log to a file. Poll for readiness instead of sleep 60.
+	
+
+GOTCHA
+User data has a 16 KB limit. Our scripts embed base64 compose files and are close. For bigger payloads, put files in S3 and download them with the instance role.
+	
+
+GOTCHA
+Changing user data does not touch a running instance. Plan for replacement.
+	
+
+Cost
+TIP
+A running lab (t3.small + t3.medium + 2 EIPs) costs roughly $2/day. Destroy when done. Unattached EIPs and forgotten NAT Gateways are the classic surprise bills.
+	
+
+TIP
+aws ce get-cost-and-usage or the Cost Explorer console, filtered by the Project tag, shows exactly what this project costs.
+	
+
+Quick command reference
+Task
+	Command
+	Format
+	terraform fmt -recursive
+	Validate
+	terraform validate
+	Plan to file
+	terraform plan -var-file=dev.tfvars -out=tfplan
+	Apply saved plan
+	terraform apply tfplan
+	Show outputs
+	terraform output / terraform output -raw name / -json
+	List state
+	terraform state list
+	Inspect one
+	terraform state show module.vpc.aws_vpc.this
+	Force replace
+	terraform apply -replace=module.kafka[0].aws_instance.this
+	Import existing
+	terraform import module.vpc.aws_vpc.this vpc-0abc...
+	Console (try expressions)
+	terraform console
+	Dependency graph
+	terraform graph, then pipe to Graphviz dot -Tpng
+	
+
+Chapter Quiz
+Q1. Which file is auto-loaded by Terraform?
+a) dev.tfvars
+b) terraform.tfvars
+c) variables.tf only
+d) any .tfvars
+Q2. Why save a plan to a file in CI?
+a) Faster
+b) So the apply executes exactly what was reviewed
+c) Required by AWS
+d) For logging only
+Q3. What is the risk of -target in normal applies?
+a) It is slow
+b) It leaves state and dependencies partially applied
+c) It deletes resources
+d) Nothing
+Q4. Best place for real secrets?
+a) tfvars in Git
+b) Hard-coded in main.tf
+c) Secrets Manager / SSM SecureString, referenced at runtime
+d) A tag
+Q5. What is the user-data size limit?
+a) 1 KB
+b) 16 KB
+c) 1 MB
+d) Unlimited
+________________
+
+
+Chapter 22: Making the Project Production-Ready
+The lab works, but a real company would need more. This chapter walks through each upgrade, why it matters, and sketches the Terraform for it. Think of it as the renovation plan that turns a temporary classroom trailer into a permanent school.
+1. Remote state with locking
+Why: Teams and CI need shared, locked, versioned state.
+# stacks/10-network/versions.tf
+terraform {
+  backend "s3" {
+    bucket       = "acme-tfstate-prod"
+    key          = "kafka-keycloak/network.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true          # native S3 locking (Terraform 1.10+); or dynamodb_table = "tf-locks"
+  }
+}
+
+
+And in stacks/20-apps/prod.tfvars:
+network_state = { backend = "s3", config = { bucket = "acme-tfstate-prod", key = "kafka-keycloak/network.tfstate", region = "us-east-1" } }
+
+
+Create the bucket once (by hand or a tiny "bootstrap" stack) with versioning and SSE-KMS enabled, and a bucket policy limited to the CI role.
+2. Private subnets, load balancers and real certificates
+Why: Servers should not have public IPs. Users should hit HTTPS with a certificate their browser trusts.
+* Add private_subnets in two AZs and create_nat_gateway = true (the VPC module already supports this).
+* Put Keycloak and Kafka UI behind an Application Load Balancer in the public subnets with an ACM certificate for a real domain (auth.example.com, kafka-ui.example.com) and a Route 53 record.
+* Change SG rules: ALB SG allows 443 from the internet (or your office); instance SGs allow 8443/8080 only from the ALB SG (source_security_group_key = "alb").
+* Remove Elastic IPs; set associate_public_ip_address = false.
+* Set KC_HOSTNAME=https://auth.example.com and Kafka UI redirect/issuer URLs to the domain; the self-signed certificate and truststore steps disappear.
+Suggested new module: modules/alb (ALB, listener, target group, health check). Suggested tfvars shape:
+keycloak = { ..., hostname = "auth.example.com", certificate_arn = "arn:aws:acm:..." }
+
+
+3. Managed database for Keycloak
+Why: Keycloak's H2 file database is for development only. Losing the disk loses every user.
+* Add modules/rds creating Amazon RDS for PostgreSQL (Multi-AZ, encrypted, automated backups) in the private subnets.
+* Keycloak env: KC_DB=postgres, KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD (from Secrets Manager).
+* Run Keycloak with start (production mode) instead of start-dev.
+4. Secrets management
+Why: Passwords should not live in state or user data.
+* Store admin password, DB password and OIDC client secret in AWS Secrets Manager (aws_secretsmanager_secret + _version).
+* Give the instance role secretsmanager:GetSecretValue on those ARNs only (an inline_policies entry on the ec2_ssm role — the IAM module already supports it).
+* User data fetches secrets at boot with aws secretsmanager get-secret-value instead of embedding them. User data shrinks and no longer needs to be sensitive.
+5. Resilience: Auto Scaling Groups and health checks
+Why: A single instance that dies stays dead.
+* Replace aws_instance with an Auto Scaling Group (min 1, max 1, or more for Kafka UI) using the same launch template. The launch_template module needs no change — that is the payoff of the modular design.
+* ALB target-group health checks (/health/ready for Keycloak, /actuator/health for Kafka UI) let the ASG replace unhealthy instances.
+* For Kafka itself, move to Amazon MSK (managed Kafka, multi-broker, multi-AZ) or run 3 brokers on separate instances with EBS data volumes (additional_volumes in the launch template module).
+6. Observability
+Why: You cannot fix what you cannot see.
+* Install the CloudWatch agent in user data; ship /var/log/*-bootstrap.log and Docker logs to CloudWatch Logs.
+* Enable detailed_monitoring = true in the launch template module.
+* Create CloudWatch alarms (CPU, status checks, ALB 5xx, target unhealthy) → SNS → email/Slack.
+* Scrape Keycloak's /metrics (already enabled on 9000) with Prometheus or CloudWatch.
+7. Security hardening
+* KMS customer-managed key for EBS (root_volume_kms_key_id), RDS and Secrets Manager.
+* VPC Flow Logs to S3/CloudWatch.
+* AWS Config rules and Security Hub for continuous checks (e.g. "no SG open to 0.0.0.0/0 on admin ports").
+* Systems Manager Patch Manager for OS updates; or bake a hardened AMI with EC2 Image Builder / Packer and pin ami_id.
+* termination_protection = true on production instances.
+* IAM: replace the CI user's AdministratorAccess with a scoped role assumed via OIDC from GitHub Actions / GitLab.
+8. Backups and disaster recovery
+* AWS Backup plan for EBS volumes and RDS with a retention policy.
+* Kafka: MSK handles replication; for self-managed, snapshot data volumes and set topic replication factor 3.
+* Document an RTO/RPO and test a restore twice a year.
+9. Multi-environment layout
+stacks/10-network/
+  dev.tfvars   staging.tfvars   prod.tfvars
+stacks/20-apps/
+  dev.tfvars   staging.tfvars   prod.tfvars
+
+
+Same code, different values, separate state keys per environment. Prod tfvars: bigger instances, private subnets, allowed_cidr = office range, termination_protection = true.
+10. CI/CD pipeline
+A typical GitHub Actions flow:
+1. On pull request: fmt -check, validate, tflint, checkov, terraform plan for each stack → plan posted as a PR comment.
+2. On merge to main: plan -out, manual approval gate, apply network then apps.
+3. Nightly: plan -detailed-exitcode to detect drift; alert if exit code 2.
+Production checklist
+Area
+	Lab
+	Production
+	State
+	Local file
+	S3 + lock + versioning + KMS
+	Network
+	1 public subnet
+	2+ AZs, private subnets, NAT, ALB
+	TLS
+	Self-signed
+	ACM certificate, real domain
+	Keycloak DB
+	H2 file
+	RDS PostgreSQL Multi-AZ
+	Kafka
+	Single node
+	MSK or 3+ brokers
+	Secrets
+	random_password in state
+	Secrets Manager
+	Compute
+	aws_instance
+	ASG + health checks
+	Access
+	allowed_cidr
+	ALB + WAF, SSO for admin
+	Logs/metrics
+	On-box files
+	CloudWatch Logs, alarms
+	AMI
+	Latest via SSM
+	Pinned, patched by Image Builder
+	Deploy
+	Laptop
+	CI pipeline with approvals
+	
+
+Chapter Quiz
+Q1. Why move Keycloak off the H2 database?
+a) H2 is slow
+b) H2 is a dev-only file DB; losing the disk loses all users
+c) Terraform cannot manage H2
+d) Licensing
+Q2. In the ALB design, who may reach port 8443 on the Keycloak instance?
+a) The internet
+b) Only the ALB security group
+c) Only your laptop
+d) Nobody
+Q3. Which change requires NO edit to the launch_template module?
+a) Switching from aws_instance to an Auto Scaling Group
+b) Changing to Azure
+c) Removing Docker
+d) Using Windows
+Q4. Where should the OIDC client secret live in production?
+a) tfvars
+b) Secrets Manager, fetched at boot
+c) A tag
+d) In the AMI
+Q5. What does plan -detailed-exitcode returning 2 mean?
+a) Error
+b) No changes
+c) Changes present (drift or pending change)
+d) Locked
+________________
+
+
+Chapter 23: Testing Terraform Projects
+Testing infrastructure code has layers, just like a building inspection: check the drawings, check the materials, then walk the finished building.
+Layer 1 – Static checks (seconds, no AWS)
+Tool
+	What it catches
+	Command
+	terraform fmt -check
+	Formatting
+	terraform fmt -check -recursive
+	terraform validate
+	Syntax, types, missing args
+	per stack, after init -backend=false
+	TFLint
+	Provider-specific mistakes (invalid instance type, deprecated args)
+	tflint --recursive
+	Checkov / tfsec / Trivy
+	Security misconfigurations (open SGs, unencrypted disks, IMDSv1)
+	checkov -d .
+	Infracost
+	Cost of a plan
+	infracost breakdown --path .
+	
+
+TIP
+Our project already passes several Checkov checks by design: IMDSv2 required, EBS encrypted, no inline SG rules on 0.0.0.0/0 except what tfvars asks for.
+	
+
+Layer 2 – Plan tests (seconds to minutes, no real resources)
+Terraform's built-in test framework (terraform test, 1.6+) runs .tftest.hcl files. With command = plan, nothing is created.
+stacks/10-network/tests/network.tftest.hcl:
+variables {
+  project_name      = "test"
+  availability_zone = "us-east-1a"
+  allowed_cidr      = "203.0.113.10/32"
+  security_groups = {
+    web = { description = "web", ingress = [{ from_port = 443, to_port = 443, cidr_ipv4 = "ALLOWED_CIDR" }] }
+  }
+}
+ 
+run "allowed_cidr_is_substituted" {
+  command = plan
+  assert {
+    condition     = local.security_groups.web.ingress[0].cidr_ipv4 == "203.0.113.10/32"
+    error_message = "ALLOWED_CIDR placeholder was not replaced"
+  }
+}
+ 
+run "one_public_subnet_by_default" {
+  command = plan
+  assert {
+    condition     = length(module.vpc.public_subnet_ids) == 1
+    error_message = "expected exactly one public subnet"
+  }
+}
+
+
+modules/security_groups/tests/rules.tftest.hcl:
+run "rejects_rule_with_two_sources" {
+  command = plan
+  variables {
+    name   = "t"
+    vpc_id = "vpc-123"
+    security_groups = { a = { description = "a", ingress = [{ from_port = 80, to_port = 80, cidr_ipv4 = "0.0.0.0/0", self = true }] } }
+  }
+  expect_failures = [var.security_groups]
+}
+
+
+Run with terraform test in the stack or module folder. Plan-mode tests still need provider credentials for some data sources; use mock_provider blocks (Terraform 1.7+) to avoid that:
+mock_provider "aws" {}
+
+
+Layer 3 – Integration tests (minutes, real resources, real money)
+Create, verify, destroy, in a sandbox account:
+* `terraform test` with `command = apply` – asserts against real outputs, then auto-destroys.
+* Terratest (Go) – terraform.InitAndApply, then hit kafka_ui_url with HTTP and expect a redirect to Keycloak; defer terraform.Destroy.
+* Smoke script – after apply, a bash script runs the Chapter 20 checks: SSM ping, /health/ready, OIDC discovery document, Kafka UI redirect.
+Example smoke test:
+#!/bin/bash
+set -e
+cd stacks/20-apps
+KC=$(terraform output -raw keycloak_public_ip)
+KU=$(terraform output -raw kafka_ui_url)
+for i in {1..60}; do curl -ksf https://$KC:9000/health/ready && break; sleep 10; done
+curl -ksf https://$KC:8443/realms/kafka-ui/.well-known/openid-configuration | jq -e '.issuer' 
+code=$(curl -s -o /dev/null -w '%{http_code}' $KU)
+[ "$code" = "302" ] || [ "$code" = "200" ]
+echo "SMOKE TEST PASSED"
+
+
+Layer 4 – Policy as code
+OPA/Conftest or Sentinel evaluate the plan JSON against rules like "no SG ingress from 0.0.0.0/0 on port 22" or "all instances must have IMDSv2":
+terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+conftest test plan.json
+
+
+Layer 5 – Drift detection and review
+* Nightly terraform plan -detailed-exitcode per stack; alert on exit code 2.
+* Require two reviewers on plans that contain destroy or forces replacement.
+* Keep terraform.tfstate versions in S3 so a bad apply can be compared and rolled back.
+Test pyramid for this project
+Level
+	How many
+	Speed
+	Where
+	fmt / validate / tflint / checkov
+	Every commit
+	Seconds
+	Local + CI
+	terraform test plan-mode
+	Dozens
+	Seconds
+	CI on PR
+	terraform test apply-mode / Terratest
+	A few
+	10–15 min
+	CI nightly or on main
+	Smoke test after deploy
+	1 script
+	5 min
+	After every apply
+	Manual login walkthrough
+	1
+	5 min
+	Before release
+	
+
+Chapter Quiz
+Q1. Which test layer creates no real resources?
+a) Terratest apply
+b) terraform test with command = plan
+c) Smoke test
+d) Manual login
+Q2. What does expect_failures = [var.security_groups] assert?
+a) The plan succeeds
+b) The variable's validation is expected to fail
+c) AWS rejects it
+d) Nothing
+Q3. What does Checkov look for?
+a) Formatting
+b) Security misconfigurations
+c) Cost
+d) Typos in tags
+Q4. How does a smoke test know Kafka UI is protected by Keycloak?
+a) Ping
+b) An HTTP 302 redirect to the Keycloak login page
+c) Reading the state file
+d) docker ps
+Q5. What is drift?
+a) A slow plan
+b) Reality differing from state/code, e.g. someone changed a SG in the console
+c) A failed test
+d) A provider upgrade
+________________
+
+
+Appendix A: Official Documentation and Further Reading
+Terraform
+* Terraform docs home: https://developer.hashicorp.com/terraform/docs
+* Language reference: https://developer.hashicorp.com/terraform/language
+* Functions: https://developer.hashicorp.com/terraform/language/functions
+* Modules: https://developer.hashicorp.com/terraform/language/modules
+* State: https://developer.hashicorp.com/terraform/language/state
+* Backends (S3): https://developer.hashicorp.com/terraform/language/backend/s3
+* terraform_remote_state: https://developer.hashicorp.com/terraform/language/state/remote-state-data
+* Tests: https://developer.hashicorp.com/terraform/language/tests
+* Style guide: https://developer.hashicorp.com/terraform/language/style
+* CLI commands: https://developer.hashicorp.com/terraform/cli/commands
+* AWS provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+* Random provider: https://registry.terraform.io/providers/hashicorp/random/latest/docs
+AWS
+* VPC: https://docs.aws.amazon.com/vpc/latest/userguide/
+* Subnets and routing: https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html
+* Security groups: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
+* EC2: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/
+* Launch templates: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html
+* Instance metadata (IMDSv2): https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
+* User data: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html
+* Elastic IPs: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html
+* IAM roles for EC2: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html
+* IAM best practices: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html
+* Session Manager: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html
+* Public AMI SSM parameters: https://docs.aws.amazon.com/linux/al2023/ug/ec2.html
+* AWS CLI reference: https://docs.aws.amazon.com/cli/latest/
+* JMESPath (for --query): https://jmespath.org/tutorial.html
+* Well-Architected Framework: https://docs.aws.amazon.com/wellarchitected/latest/framework/
+Applications
+* Keycloak server guide: https://www.keycloak.org/guides
+* Keycloak in containers: https://www.keycloak.org/server/containers
+* Apache Kafka (KRaft): https://kafka.apache.org/documentation/#kraft
+* Kafka UI (kafbat): https://ui.docs.kafbat.io/
+* Docker Compose: https://docs.docker.com/compose/
+Testing tools
+* TFLint: https://github.com/terraform-linters/tflint
+* Checkov: https://www.checkov.io/
+* Terratest: https://terratest.gruntwork.io/
+* Conftest: https://www.conftest.dev/
+* Infracost: https://www.infracost.io/docs/
+________________
+
+
+Appendix B: Glossary
+Term
+	Meaning
+	AMI
+	Amazon Machine Image — the OS install used to create an instance
+	ARN
+	Amazon Resource Name — a globally unique ID like arn:aws:iam::123:role/x
+	AZ
+	Availability Zone — one data center group inside a region
+	Backend
+	Where Terraform stores state
+	CIDR
+	Address range notation, e.g. 10.40.0.0/16
+	Data source
+	A Terraform block that reads existing information
+	Drift
+	When real infrastructure differs from state/code
+	EBS
+	Elastic Block Store — virtual hard drives
+	EC2
+	Elastic Compute Cloud — virtual servers
+	Egress / Ingress
+	Outbound / inbound traffic
+	EIP
+	Elastic IP — a permanent public IPv4 address
+	for_each / count
+	Meta-arguments to create multiple copies
+	HCL
+	HashiCorp Configuration Language
+	IaC
+	Infrastructure as Code
+	IAM
+	Identity and Access Management
+	IGW
+	Internet Gateway
+	IMDS
+	Instance Metadata Service (v2 requires a token)
+	Instance profile
+	Wrapper that attaches an IAM role to an EC2 instance
+	KRaft
+	Kafka's built-in consensus mode (no ZooKeeper)
+	Launch template
+	Saved recipe for launching instances
+	Local
+	A named value computed inside a module
+	Module
+	A reusable folder of Terraform
+	NAT Gateway
+	Lets private subnets reach out to the internet
+	OIDC
+	OpenID Connect — the login protocol Kafka UI uses with Keycloak
+	Plan
+	The list of actions Terraform will take
+	Provider
+	Plugin that talks to one platform (AWS)
+	Realm
+	A Keycloak tenant holding users and clients
+	Resource
+	A thing Terraform creates and manages
+	Root module
+	The folder you run terraform in
+	Route table
+	Rules for where network traffic goes
+	SAN
+	Subject Alternative Name — the addresses a TLS certificate is valid for
+	Security group
+	Instance-level stateful firewall
+	SSM
+	AWS Systems Manager (Session Manager, Parameter Store)
+	Stack
+	A root module with its own state, deployed as a unit
+	State
+	Terraform's record of what it built
+	Subnet
+	A slice of a VPC in one AZ
+	tfvars
+	A file of variable values
+	User data
+	Script run at first boot
+	VPC
+	Virtual Private Cloud — your private network in AWS
+	
+
+________________
+
+
+Appendix C: Quiz Answer Key
+Chapter 1: Infrastructure as Code
+Q1 b. Declarative means you describe the desired end state. Terraform computes the actions needed.
+Q2 c. State records what exists and its real cloud IDs, so Terraform can compare it to your files.
+Q3 b. The plan is the change order you approve before building.
+Q4 c. IaC makes systems readable and reviewable, but you still must understand them.
+Q5 b. Subnets are rooms inside the building (the VPC) where servers live.
+Chapter 2: AWS Basics — The Services We Use
+Q1 a. A subnet is always in exactly one AZ. For multi-AZ you create several subnets.
+Q2 b. The route to the IGW is what gives a subnet internet access.
+Q3 b. A /24 leaves 8 bits free: 2^8 = 256 addresses (a few are reserved by AWS).
+Q4 b. The Keycloak certificate and Kafka UI redirect URLs embed the public IPs, so they must be known first.
+Q5 b. The instance profile is the holder that attaches a role to an instance.
+Chapter 3: How Terraform Works
+Q1 b. Init prepares the working directory; it never touches cloud resources.
+Q2 c. Replacement can lose data; read the "forces replacement" reason.
+Q3 b. Attribute references create implicit dependencies in the graph.
+Q4 b. State can hold generated passwords and must be stored securely.
+Q5 b. The AWS provider turns aws_vpc into real AWS API calls.
+Chapter 4: Setting Up and Your First Terraform Project
+Q1 b.
+Q2 b. The provider reads the CLI's credentials automatically.
+Q3 b. Local names only exist in your code; tags.Name is what AWS shows.
+Q4 c. The lock file pins provider versions so teammates get the same ones.
+Q5 b. Destroy removes what Terraform tracks in its state, nothing more.
+Chapter 5: The Terraform Language — Every Keyword Explained
+Q1 b. for_each iterates a map or set and keys each instance by name.
+Q2 c. try returns the fallback when the first expression errors.
+Q3 c. Command-line -var overrides everything else.
+Q4 b.
+Q5 b. The plan is a fixed list of actions, so the number of copies must be decidable up front.
+Chapter 6: Modules — Reusable Building Blocks
+Q1 b.
+Q2 c. Providers belong in the root; child modules inherit them.
+Q3 a.
+Q4 b.
+Q5 b. Zero copies means the module is skipped entirely.
+Chapter 7: Types and Values — Strings, Numbers, Lists, Maps and Objects
+Q1 b. Only double quotes.
+Q2 b.
+Q3 c. Convert with tolist first.
+Q4 b. Later maps win.
+Q5 c.
+Chapter 8: Variables, tfvars, Locals and Outputs in Depth
+Q1 b.
+Q2 b. terraform.tfvars and *.auto.tfvars load automatically.
+Q3 b.
+Q4 b.
+Q5 c. Hence remote, encrypted state.
+Chapter 9: Functions and Expressions Cookbook
+Q1 b.
+Q2 a.
+Q3 c.
+Q4 b.
+Q5 b.
+Chapter 10: Resources in Depth — Required Settings and How to Read the Docs
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 11: Modules in Depth — Writing One From Scratch
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 12: What to Avoid — Terraform Anti-Patterns
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 13: Project Tour
+Q1 c.
+Q2 b. The back-channel call stays inside the VPC, allowed by the SG-to-SG rule.
+Q3 b. They document that network runs before apps.
+Q4 c.
+Q5 b. (Direct IDs are also supported as an override.)
+Chapter 14: The VPC Module, Line by Line
+Q1 b.
+Q2 a.
+Q3 b. It needs the IGW to reach the internet on behalf of private subnets.
+Q4 b.
+Q5 b.
+Chapter 15: The Security Groups Module, Line by Line
+Q1 b.
+Q2 c.
+Q3 b.
+Q4 b.
+Q5 c.
+Chapter 16: The IAM Role and Elastic IP Modules
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 17: The Launch Template and EC2 Instance Modules
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 18: The Network Stack (Process 1), Line by Line
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 19: The Apps Stack (Process 2), Line by Line
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Chapter 20: Deploy, Test and Tear Down — Step by Step
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 a.
+Chapter 21: Best Practices, Tips and Gotchas
+Q1 b. Others need -var-file= (except *.auto.tfvars).
+Q2 b.
+Q3 b.
+Q4 c.
+Q5 b.
+Chapter 22: Making the Project Production-Ready
+Q1 b.
+Q2 b.
+Q3 a. The template is reused as-is — the benefit of a base module.
+Q4 b.
+Q5 c.
+Chapter 23: Testing Terraform Projects
+Q1 b.
+Q2 b.
+Q3 b.
+Q4 b.
+Q5 b.
+Page
